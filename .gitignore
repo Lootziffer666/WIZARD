@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# downloaded asset preview images (fetched at runtime, large/binary)
+/data/images/

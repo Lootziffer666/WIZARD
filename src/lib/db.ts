@@ -58,7 +58,7 @@ export function toAsset(row: LibraryAsset): Asset {
     type: deriveType(row.category),
     path: row.url,
     tags,
-    thumbnail: row.image,
+    thumbnail: `/api/image/${row.id}`,
     description: `${row.publisher} · ${row.category} · ${row.platform}`,
   };
 }

@@ -22,6 +22,11 @@ Zielgruppe: Nutzer ohne Unreal-/Programmierkenntnisse ("GUI für Doofis").
 - [x] Chat-Route auf DB-Suche umgestellt (Tool-Schema an echte Felder angepasst,
       System-Prompt übersetzt DE→EN für Katalog-Suche)
 - [x] GUI lädt Katalog jetzt aus `/api/assets` statt Sample-Katalog
+- [x] **Fab-Preview-Pics lokal heruntergeladen**: alle 1437 Fab-Bilder → `data/images/<id>.img`
+      via `scripts/download-images.mjs` (Konkurrenz 24, idempotent)
+- [x] `src/app/api/image/[id]/route.ts`: liefert lokales Bild (Sniff Magic-Bytes → Content-Type),
+      sonst 307-Redirect auf Original-URL (Remote-Fallback). Galerie nutzt `/api/image/<id>` als Thumbnail
+- [x] `data/images/` in `.gitignore` (groß/binary, Sandbox-FS ephemerer)
 - [x] typecheck + lint + build grün, commit & push
 
 ## Current Structure
