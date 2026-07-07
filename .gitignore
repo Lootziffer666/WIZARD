@@ -40,5 +40,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# downloaded asset preview images (fetched at runtime, large/binary)
-/data/images/
+# asset preview images are committed to data/images (small, ~14MB total)
