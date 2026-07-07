@@ -26,7 +26,7 @@ Zielgruppe: Nutzer ohne Unreal-/Programmierkenntnisse ("GUI für Doofis").
       via `scripts/download-images.mjs` (Konkurrenz 24, idempotent)
 - [x] `src/app/api/image/[id]/route.ts`: liefert lokales Bild (Sniff Magic-Bytes → Content-Type),
       sonst 307-Redirect auf Original-URL (Remote-Fallback). Galerie nutzt `/api/image/<id>` als Thumbnail
-- [x] `data/images/` ist **committed** (1437 Fab-Bilder, ~14MB) – liegen nicht mehr nur im ephemeren Sandbox-FS, sondern persistence im Repo/Deployment
+- [x] `data/images/` ist **committed** (alle 2470 Bilder Fab+Unity, ~52MB) – persist im Repo/Deployment; Route liefert sie lokal aus, Remote-Redirect nur noch als Fallback
 - [x] typecheck + lint + build grün, commit & push
 
 ## Current Structure
