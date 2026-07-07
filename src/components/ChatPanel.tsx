@@ -14,8 +14,8 @@ interface Settings {
 
 const SUGGESTIONS = [
   "Finde mir holzige Türen.",
-  "Welche Materialien gibt es für Stein?",
   "Zeig mir Assets unter 1000 Polygonen.",
+  "Mach ein Koop-Spiel in einer staubigen Wüstenstadt mit improvisierter Technik.",
   "Ich brauche eine Fackel mit Feuer.",
 ];
 

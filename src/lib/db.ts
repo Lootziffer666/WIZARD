@@ -73,7 +73,8 @@ function ensureSchema(db: DatabaseType) {
       platform TEXT NOT NULL,
       url TEXT NOT NULL,
       image TEXT,
-      addedAt INTEGER
+      addedAt INTEGER,
+      analysis TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_assets_category ON assets(category);
     CREATE INDEX IF NOT EXISTS idx_assets_platform ON assets(platform);
@@ -84,6 +85,7 @@ function ensureSchema(db: DatabaseType) {
       title,
       category,
       publisher,
+      analysis,
       tokenize = 'unicode61'
     );
   `);
@@ -100,11 +102,11 @@ function seedIfEmpty(db: DatabaseType) {
   const assets = JSON.parse(readFileSync(SEED_PATH, "utf8")) as LibraryAsset[];
 
   const insertAsset = db.prepare(
-    `INSERT OR REPLACE INTO assets (id, title, category, publisher, platform, url, image, addedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT OR REPLACE INTO assets (id, title, category, publisher, platform, url, image, addedAt, analysis)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertFts = db.prepare(
-    `INSERT INTO assets_fts (id, title, category, publisher) VALUES (?, ?, ?, ?)`
+    `INSERT INTO assets_fts (id, title, category, publisher, analysis) VALUES (?, ?, ?, ?, ?)`
   );
 
   const tx = db.transaction((rows: LibraryAsset[]) => {
@@ -117,9 +119,10 @@ function seedIfEmpty(db: DatabaseType) {
         a.platform,
         a.url,
         a.image,
-        a.addedAt
+        a.addedAt,
+        ""
       );
-      insertFts.run(a.id, a.title, a.category, a.publisher);
+      insertFts.run(a.id, a.title, a.category, a.publisher, "");
     }
   });
   tx(assets);
@@ -136,20 +139,28 @@ export function getDb(): DatabaseType {
   return db;
 }
 
-function buildMatch(query: string): string {
+function buildMatch(query: string, mode: "and" | "or" = "and"): string {
   const tokens = query
     .toLowerCase()
     .split(/\s+/)
     .map((t) => t.replace(/["*]/g, "").trim())
     .filter(Boolean);
   if (tokens.length === 0) return "";
-  return tokens.map((t) => `"${t}"*`).join(" ");
+  const joined = tokens.map((t) => `"${t}"*`).join(mode === "or" ? " OR " : " ");
+  return joined;
 }
 
 export function searchLibrary(params: SearchParams = {}): LibraryAsset[] {
   const db = getDb();
-  const { query = "", category, platform, publisher, limit = 60 } = params;
-  const match = buildMatch(query);
+  const {
+    query = "",
+    category,
+    platform,
+    publisher,
+    limit = 60,
+    or = false,
+  } = params;
+  const match = buildMatch(query, or ? "or" : "and");
 
   const clauses: string[] = [];
   const bind: unknown[] = [];
@@ -192,6 +203,39 @@ export function searchLibrary(params: SearchParams = {}): LibraryAsset[] {
 
 export function searchAssets(params: SearchParams = {}): Asset[] {
   return searchLibrary(params).map(toAsset);
+}
+
+export function updateAnalysis(id: string, analysis: string): void {
+  const db = getDb();
+  db.prepare("UPDATE assets SET analysis = ? WHERE id = ?").run(analysis, id);
+  db.prepare("UPDATE assets_fts SET analysis = ? WHERE id = ?").run(
+    analysis,
+    id
+  );
+}
+
+export function getUnanalyzedIds(limit = 1000): string[] {
+  const db = getDb();
+  return (
+    db
+      .prepare(
+        "SELECT id FROM assets WHERE analysis IS NULL OR analysis = '' LIMIT ?"
+      )
+      .all(limit) as { id: string }[]
+  ).map((r) => r.id);
+}
+
+export function countAnalyzed(): { total: number; analyzed: number } {
+  const db = getDb();
+  const total = (db.prepare("SELECT COUNT(*) c FROM assets").get() as {
+    c: number;
+  }).c;
+  const analyzed = (
+    db.prepare(
+      "SELECT COUNT(*) c FROM assets WHERE analysis IS NOT NULL AND analysis != ''"
+    ).get() as { c: number }
+  ).c;
+  return { total, analyzed };
 }
 
 export function getFacets(): Facets {
