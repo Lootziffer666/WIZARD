@@ -1,44 +1,47 @@
-# Product Context: Next.js Starter Template
+# Product Context: Asset Pilot
 
-## Why This Template Exists
+## Warum es existiert
 
-Starting a new Next.js project involves boilerplate setup, configuration decisions, and establishing patterns. This template provides a clean, opinionated starting point that eliminates setup friction and establishes best practices from the start. It's optimized for AI-assisted development, where an AI can quickly extend the template based on user requirements.
+Entwickler haben tausende Assets, aber kein Werkzeug, das aus einer *Idee* einen
+Produktionsplan macht. Asset Pilot wendet die Bibliothek an, statt sie nur
+durchzublättern.
 
-## Problems It Solves
+## Probleme, die es löst
 
-1. **Setup Time**: Eliminates boilerplate configuration (TypeScript, Tailwind, ESLint)
-2. **Decision Fatigue**: Pre-made choices for tooling and patterns
-3. **AI Context**: Memory bank provides persistent context for AI assistants
-4. **Extensibility**: Recipe system for adding common features
-5. **Consistency**: Standardized project structure and conventions
+1. **Idee→Prototyp zu langsam**: keine Brücke von "Ko-op-Spiel für Jake & mich"
+   zu konkreten Assets/Templates.
+2. **Nur Namenssuche**: man findet "Star Wars Haus" nicht, aber "begehbare
+   Wüstenarchitektur mit runden Türen, staubig, warmer Lichtstimmung" wäre der
+   eigentliche Bedarf (visuelle Grammatik).
+3. **Kein Produktionsgedächtnis**: welches Asset passt in welchen Kontext?
+4. **Zusammengewürfelt statt Welt**: SHADED-Vereinheitlichung fehlt.
 
-## How It Should Work (User Flow)
+## Wie es funktionieren soll (User Flow – Zielbild)
 
-1. User starts with this template
-2. User describes what they want to build to AI assistant
-3. AI adds pages, components, and features as needed
-4. AI uses recipes for common additions (database, auth)
-5. User previews changes via hot reload
-6. Iterate until satisfied
-7. Deploy
+1. Nutzer beschreibt Spielidee (natürlich, oft Deutsch).
+2. Creative Director (GPT) + mini-me erzeugen Brief/Konzept.
+3. Asset Pilot durchsucht die Bibliothek nach Stil/Genre/Atmosphäre/Inhalt.
+4. Asset Pilot schlägt Templates (als Fähigkeiten) + Assets (gecastet) vor.
+5. Missing-Asset-Liste + Starter-Kit werden erzeugt.
+6. Optional: 3D-RE-GEN analysiert Referenzbilder räumlich.
+7. SHADED vereinheitlicht die Welt; CUE-AGENT prüft Spielbarkeit.
+8. Ergebnis: spielbarer UE/UEFN-Prototyp.
 
-## Key User Experience Goals
+## Aktueller Stand (MVP-Basis ist live)
 
-- **Zero to Feature Fast**: Get building immediately, no setup required
-- **AI-Friendly**: Memory bank and recipes make AI assistance effective
-- **Flexible Foundation**: Can become any type of application
-- **Best Practices Built-In**: TypeScript strict mode, ESLint, clean structure
+- `/api/assets` (FTS5-Suche + Facets), `/api/chat` (KI-Tool gegen DB),
+  `/api/image/[id]` (lokale Previews), Galerie + Chat-GUI.
+- Daten: 2.470 Assets (Unity + Fab), lokal heruntergeladene Previews.
 
-## What This Template Provides
+## Experience-Ziele
 
-1. **Clean App Structure**: Single page ready for expansion
-2. **Type Safety**: Full TypeScript setup with strict mode
-3. **Modern Styling**: Tailwind CSS 4 ready to use
-4. **Code Quality**: ESLint configured
-5. **Extensibility**: Recipe system for common features
+- **Idee → konkrete Produktionsentscheidung**, nicht "bester Asset".
+- **Richtig für diese Welt**, nicht nur technisch passend.
+- **Belegbar spielbar** (CUE-AGENT), nicht "gut aussehend".
 
-## Integration Points
+## Integrationspunkte
 
-- **Database**: Use add-database recipe for Drizzle + SQLite
-- **Styling**: Tailwind CSS pre-configured
-- **AI Assistance**: Memory bank for context persistence
+- DB: `src/lib/db.ts` (better-sqlite3 + FTS5), `data/assets.db`.
+- Bilder: `data/images/<id>.img`, Route `/api/image/[id]`.
+- KI: Anthropic SDK in `/api/chat`.
+- Geplant: Templates-Quellen, Stil-Metadaten, 3D-RE-GEN, SHADED, ANVIL, CUE-AGENT.

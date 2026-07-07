@@ -1,120 +1,63 @@
-# System Patterns: Next.js Starter Template
+# System Patterns: Asset Pilot
 
-## Architecture Overview
+## Architektur-Überblick (aktuell gebaut)
 
 ```
 src/
-├── app/                    # Next.js App Router
-│   ├── layout.tsx          # Root layout + metadata
-│   ├── page.tsx            # Home page
-│   ├── globals.css         # Tailwind imports + global styles
-│   └── favicon.ico         # Site icon
-└── (expand as needed)
-    ├── components/         # React components (add when needed)
-    ├── lib/                # Utilities and helpers (add when needed)
-    └── db/                 # Database files (add via recipe)
+├── app/
+│   ├── page.tsx                 # GUI: Galerie + Chat (lädt Katalog via /api/assets)
+│   ├── api/
+│   │   ├── assets/route.ts      # GET: FTS5-Suche (q/category/platform/publisher) + facets
+│   │   ├── chat/route.ts        # POST: Claude-Proxy mit search_assets-Tool-Loop
+│   │   └── image/[id]/route.ts  # GET: lokales Bild (Magic-Bytes-Sniff) od. 307→Remote
+│   └── layout.tsx, globals.css
+├── components/
+│   ├── AssetGallery.tsx, AssetCard.tsx, ChatPanel.tsx,
+│   └── SettingsModal.tsx
+├── lib/
+│   ├── db.ts                    # SQLite (better-sqlite3) + FTS5, Seed aus assets.json
+│   ├── types.ts                 # Asset/Catalog-Typen
+│   └── search.ts                # Token-Suche (Client-Galerie)
+├── data/assets.json             # 2.470 geparste Assets (Seed-Quelle)
+└── scripts/seed.ts, download-images.mjs
+
+data/
+├── assets.db                    # vorgebaute SQLite-DB (committed)
+└── images/<id>.img              # 2.470 lokale Preview-Bilder (committed)
 ```
 
-## Key Design Patterns
+## Schlüssel-Design-Entscheidungen
 
-### 1. App Router Pattern
+- **Runtime ist Node** → `better-sqlite3` (nicht `bun:sqlite`). `next.config.ts`
+  setzt `serverExternalPackages`.
+- **Named Parameter**: better-sqlite3 erwartet JS-Keys OHNE Sigil → im Code
+  werden **positionale `?`** genutzt (sicher für beide Runtimes).
+- **FTS5**: `assets_fts` Virtual Table über `title, category, publisher`,
+  `bm25()`-Ranking, Präfix-Match (`"token"*`).
+- **Bilder**: Ursprungs-URL in DB; lokal gespiegelt in `data/images/<id>.img`;
+  Route dient als einheitlicher Endpunkt mit Remote-Fallback.
+- **assets.txt** ist ein Browser-Console-Dump (CRLF, JS-Literal). Parser nutzt
+  CRLF-Strip + Feld-Block-Regex.
 
-Uses Next.js App Router with file-based routing:
-```
-src/app/
-├── page.tsx           # Route: /
-├── about/page.tsx     # Route: /about
-├── blog/
-│   ├── page.tsx       # Route: /blog
-│   └── [slug]/page.tsx # Route: /blog/:slug
-└── api/
-    └── route.ts       # API Route: /api
-```
+## Geplante/angestrebte Komponenten (aus assetpilot.md)
 
-### 2. Component Organization Pattern (When Expanding)
+| Komponente | Zweck | Status |
+|------------|-------|--------|
+| Creative Director (GPT) | Brief/Kontext/Stil | Konzept |
+| mini-me | Ideen-/Genre-Generator | Konzept |
+| Asset Pilot | Produktionsleiter, Suche, Starter Kits, Missing-Asset-Listen | **MVP gebaut** |
+| 3D-RE-GEN | räumliche Szenenanalyse aus Bildern | extern/Konzept |
+| SHADED | Weltzustands-/Kohärenz-System (Shader) | Konzept |
+| ANVIL | Orchestrator über alle Schritte | Konzept |
+| CUE-AGENT | Qualitäts-/Spielbarkeits-Prüfer | Konzept |
+| Unreal in a Box | autonomer Container (UE/UEFN/MCP) | Infrastruktur |
 
-```
-src/components/
-├── ui/                # Reusable UI components (Button, Card, etc.)
-├── layout/            # Layout components (Header, Footer)
-├── sections/          # Page sections (Hero, Features, etc.)
-└── forms/             # Form components
-```
+## Styling
 
-### 3. Server Components by Default
-
-All components are Server Components unless marked with `"use client"`:
-```tsx
-// Server Component (default) - can fetch data, access DB
-export default function Page() {
-  return <div>Server rendered</div>;
-}
-
-// Client Component - for interactivity
-"use client";
-export default function Counter() {
-  const [count, setCount] = useState(0);
-  return <button onClick={() => setCount(c => c + 1)}>{count}</button>;
-}
-```
-
-### 4. Layout Pattern
-
-Layouts wrap pages and can be nested:
-```tsx
-// src/app/layout.tsx - Root layout
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  );
-}
-
-// src/app/dashboard/layout.tsx - Nested layout
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex">
-      <Sidebar />
-      <main>{children}</main>
-    </div>
-  );
-}
-```
-
-## Styling Conventions
-
-### Tailwind CSS Usage
-- Utility classes directly on elements
-- Component composition for repeated patterns
-- Responsive: `sm:`, `md:`, `lg:`, `xl:`
-
-### Common Patterns
-```tsx
-// Container
-<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-
-// Responsive grid
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-// Flexbox centering
-<div className="flex items-center justify-center">
-```
-
-## File Naming Conventions
-
-- Components: PascalCase (`Button.tsx`, `Header.tsx`)
-- Utilities: camelCase (`utils.ts`, `helpers.ts`)
-- Pages/Routes: lowercase (`page.tsx`, `layout.tsx`)
-- Directories: kebab-case (`api-routes/`) or lowercase (`components/`)
+- Tailwind CSS 4, dunkles Theme (neutral-950 Oberfläche, emerald-Akzente).
 
 ## State Management
 
-For simple needs:
-- `useState` for local component state
-- `useContext` for shared state
-- Server Components for data fetching
-
-For complex needs (add when necessary):
-- Zustand for client state
-- React Query for server state
+- Galerie/Chat sind Client Components; Daten kommen aus `/api/assets`.
+- KI-Fund-IDs (`foundIds`) werden vom Chat zurückgegeben und in der Galerie
+  hervorgehoben.

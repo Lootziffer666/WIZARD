@@ -1,48 +1,59 @@
-# Project Brief: Next.js Starter Template
+# Project Brief: Asset Pilot (agentisches Kreativstudio)
 
-## Purpose
+## Was das Projekt wirklich ist
 
-This is a minimal Next.js starter template designed for AI-assisted development. It provides a clean foundation that can be extended to build any type of web application through interaction with an AI assistant.
+Kein Asset-Browser, sondern ein **intelligenter Produktionsassistent** für
+Spiele-Entwicklung. Ziel: den Weg von einer Idee zum ersten spielbaren Prototyp
+massiv verkürzen. Der Nutzer arbeitet auf Ideen-Ebene, nicht auf Asset-Ebene.
 
-## Target Users
+Die zentrale Ressource ist eine **SQLite-Wissensbasis** der eigenen Assets
+(aktuelle Basis: 2.470 Assets aus Unity Asset Store + Fab, siehe `assets.txt`
+bzw. `src/data/assets.json` und `data/assets.db`).
 
-- Developers wanting a clean Next.js starting point
-- Users building applications through AI-assisted coding
-- Teams needing a standardized, modern Next.js setup
+## LeitVision (Quelle: `assetpilot.md` im Repo-Root)
 
-## Core Use Case
+Asset Pilot ist Teil eines agentischen Studios mit festen Rollen:
 
-Users describe what they want to build to an AI assistant, which then expands this template by:
+| Rolle | Entität | Aufgabe |
+|-------|---------|---------|
+| Creative Director | GPT | Kontext, Stil, Creative Briefs, langfristiger Kontext |
+| Ideen-Generator | mini-me | verrückte Konzepte, Genres, Mechaniken, Worldbuilding |
+| Produktionsleiter | Asset Pilot | Assets suchen, Templates wählen, Starter Kits, Missing-Asset-Listen |
+| Weltkleber | SHADED | visuelle Kohärenz durch Shader/Weltzustände |
+| Raum-Sensor | 3D-RE-GEN | räumliche Szenenanalyse aus Bildern |
+| Orchestrator | ANVIL | verbindet alle Schritte |
+| Qualitäts-Türsteher | CUE-AGENT | prüft "belegbar spielbar" nach jedem Build |
+| Werkstatt | Unreal in a Box | autonome Container-Umgebung (UE/UEFN, MCP, Screenshot-Agent) |
 
-1. Adding components and pages as needed
-2. Installing additional dependencies
-3. Setting up databases, authentication, etc. using recipes
-4. Customizing styling and branding
+## Kernformel (aus der Vision)
 
-## Key Requirements
+`mini-me = Bedeutung · 3D-RE-GEN = Raum · Asset Pilot = Produktion ·
+SHADED = Kohärenz · CUE-AGENT = Beweis · ANVIL = Orchestrierung`
 
-### Must Have
+Pipeline (Endziel):
+`Idee → Absicht → Fähigkeiten → Räume → Assets → Weltlogik → spielbarer Prototyp`
 
-- Modern Next.js 16 setup with App Router
-- TypeScript for type safety
-- Tailwind CSS 4 for styling
-- ESLint for code quality
-- Clean, minimal starting structure
-- Bun as package manager
+## Wichtigste Prinzipien aus der Vision
 
-### Nice to Have
+- **Nicht nach Namen suchen**, sondern nach Stil/Genre/Atmosphäre ("visuelle Grammatik").
+- **Assets casten statt bauen**: Asset bekommt eine Rolle in einer Szene.
+- **Missing-Asset-Detection**: fehlende *Funktionen* erkennen, nicht nur Objekte.
+- **Produktionsgedächtnis**: welches Asset bewährt sich in welchem Kontext.
+- **TRON-Prinzip**: KI repräsentiert nicht die Welt, sie verbessert nur die
+  Darstellung. Die Welt bleibt explizit/deterministisch (Bedingungen statt Pixel).
+- **Mehrere Container**: domänenspezifische visuelle Grammatik pro Projekt.
 
-- Recipe system for common additions (database, auth)
-- Memory bank for AI context persistence
-- Clear development guidelines
+## Aktueller, bereits gebauter Stand (MVP-Basis)
 
-## Success Metrics
+- SQLite-DB (`better-sqlite3`, FTS5) mit 2.470 Assets, API `/api/assets`.
+- KI-Chat (`/api/chat`) mit `search_assets`-Tool gegen die DB.
+- Lokale Preview-Bilder (`data/images/<id>.img`) + `/api/image/[id]`.
+- GUI (Galerie + Chat) lädt Katalog aus der DB.
 
-- Clean, zero-error TypeScript setup
-- Passing lint and type checks
+## Nächste sinnvolle Schritte (noch nicht gebaut)
 
-## Constraints
-
-- Minimal dependencies by default
-- Framework: Next.js 16 + React 19 + Tailwind CSS 4
-- Package manager: Bun
+Siehe `context.md` → "Current Focus". Konkrete Kandidaten aus der Vision:
+1. **Production-Brief-Modus**: aus Spielidee → kuratierter Starter-Kit + Missing-Asset-Liste.
+2. **Stil/Genre/Atmosphären-Suche**: angereicherte Metadaten statt nur Namens-FTS.
+3. **Asset-Casting**: Assets Rollen in einer Szene zuordnen.
+4. **Templates/Quellen-Modell**: Fab/UEFN/LEGO/Star-Wars/Eigene unterscheiden.

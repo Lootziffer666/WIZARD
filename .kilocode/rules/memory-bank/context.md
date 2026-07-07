@@ -1,12 +1,13 @@
-# Active Context: Next.js Starter Template
+# Active Context: Asset Pilot
 
 ## Current State
 
-**Status**: ✅ AssetPilot GUI gebaut (KI-Asset-Suche für Unreal-Projekte)
+**Status**: ✅ AssetPilot MVP gebaut (KI-gestützte Asset-Suche + lokale Previews)
 
-Next.js 16 App mit einer klickbaren Oberfläche, die Claude über Tool-Use auf
-einen Asset-Katalog zugreifen lässt (ohne alle Assets in den Kontext zu laden).
-Zielgruppe: Nutzer ohne Unreal-/Programmierkenntnisse ("GUI für Doofis").
+Nächste Evolutionsstufe: **agentisches Kreativstudio** (siehe `assetpilot.md`
+im Repo-Root – die neue Leitvision). Asset Pilot wird vom Asset-Browser zum
+*Produktionsleiter*, der aus einer Spielidee Starter Kits + Missing-Asset-Listen
+erzeugt und Assets nach Stil/Genre/Atmosphäre (visuelle Grammatik) castet.
 
 ## Recently Completed
 
@@ -49,11 +50,32 @@ Zielgruppe: Nutzer ohne Unreal-/Programmierkenntnisse ("GUI für Doofis").
 
 ## Current Focus
 
-Nächste sinnvolle Schritte (noch nicht gebaut):
-1. Semantische Suche (Embeddings) statt reiner Token/FTS5-Suche
-2. Kategorie-/Plattform-Filter in der Galerie (aktuell nur Typ + Text)
-3. Thumbnails größer / Lazy-Loading in Galerie
-4. ImportModal wieder aktivieren (aktuell nicht eingebunden)
+Nächste Schritte, abgeleitet aus `assetpilot.md` (Vision: agentisches Studio).
+Konkrete, mit der vorhandenen DB/Assets umsetzbare Kandidaten:
+
+1. **Production-Brief-Modus** (höchste Priorität laut Vision):
+   Aus einer Spielidee → kuratierter *Starter Kit* + *Missing-Asset-Liste*.
+   Neue API + KI-Tool, das Brief in Kategorie/Stil-Filter übersetzt.
+2. **Stil/Genre/Atmosphären-Suche** ("visuelle Grammatik"):
+   Angereicherte Metadaten statt nur Namens-FTS5. Quelle: Kategorie-Taxonomie
+   + abgeleitete Stichworte (Wüste, Urban, Fantasy, Horror, Cartoon, Realistisch …).
+3. **Asset-Casting**: Asset bekommt eine *Rolle* in einer Szene (nicht nur Treffer).
+4. **Quellen-Modell**: Fab / UEFN / LEGO / Star-Wars / Eigene unterscheiden
+   (DB-Spalte `source` ergänzen).
+5. **Semantische Suche (Embeddings)** als langfristiges Upgrade der FTS5-Suche.
+6. **Templates-Fähigkeiten**: 38 Genre-Templates als "Fähigkeiten" modellieren.
+
+Noch offen / externe Systeme (Konzept, nicht im Repo):
+mini-me, Creative Director (GPT), 3D-RE-GEN, SHADED, ANVIL, CUE-AGENT,
+Unreal in a Box. Diese sind Teil der Vision, aber eigene Baustellen.
+
+## Session History
+
+- 2026-07-07: assets.txt geparst → SQLite/FTS5-DB (2470 Assets), KI-Chat an DB
+  angeschlossen, lokale Previews (alle 2470) heruntergeladen + committet.
+- 2026-07-07: `assetpilot.md` (Vision-Brainstorming) ins Repo gelegt → Scope
+  erweitert sich zum agentischen Kreativstudio. Memory-Bank an Vision angepasst
+  (brief/product/architecture/context).
 
 ## Wichtige Hinweise
 
