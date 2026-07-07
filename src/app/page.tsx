@@ -1,15 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Asset, Catalog } from "@/lib/types";
-import { SAMPLE_CATALOG } from "@/lib/sampleCatalog";
 import AssetGallery from "@/components/AssetGallery";
 import ChatPanel from "@/components/ChatPanel";
 import SettingsModal, { type Settings } from "@/components/SettingsModal";
-import ImportModal from "@/components/ImportModal";
 
 export default function Home() {
-  const [catalog, setCatalog] = useState<Catalog>(SAMPLE_CATALOG);
+  const [catalog, setCatalog] = useState<Catalog>([]);
+  const [loading, setLoading] = useState(true);
   const [foundIds, setFoundIds] = useState<Set<string>>(new Set());
   const [settings, setSettings] = useState<Settings>(() => {
     if (typeof window !== "undefined") {
@@ -25,8 +24,25 @@ export default function Home() {
     return { apiKey: "", model: "claude-sonnet-4-6" };
   });
   const [showSettings, setShowSettings] = useState(false);
-  const [showImport, setShowImport] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/assets?limit=3000")
+      .then((r) => r.json())
+      .then((data) => {
+        if (active) setCatalog(data.assets ?? []);
+      })
+      .catch(() => {
+        /* ignore */
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const saveSettings = (s: Settings) => {
     setSettings(s);
@@ -44,23 +60,12 @@ export default function Home() {
           <h1 className="text-lg font-bold">
             🛰️ AssetPilot{" "}
             <span className="text-xs font-normal text-neutral-500">
-              KI-Asset-Suche für Unreal
+              KI-Asset-Suche ·{" "}
+              {loading ? "lade…" : `${catalog.length} Assets (DB)`}
             </span>
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCatalog(SAMPLE_CATALOG)}
-            className="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500"
-          >
-            Beispiel laden
-          </button>
-          <button
-            onClick={() => setShowImport(true)}
-            className="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500"
-          >
-            📥 Importieren
-          </button>
           <button
             onClick={() => setShowSettings(true)}
             className="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500"
@@ -80,7 +85,6 @@ export default function Home() {
         </section>
         <section className="flex flex-col">
           <ChatPanel
-            catalog={catalog}
             settings={settings}
             onFoundIds={onFoundIds}
           />
@@ -133,12 +137,6 @@ export default function Home() {
           settings={settings}
           onChange={saveSettings}
           onClose={() => setShowSettings(false)}
-        />
-      )}
-      {showImport && (
-        <ImportModal
-          onImport={setCatalog}
-          onClose={() => setShowImport(false)}
         />
       )}
     </main>

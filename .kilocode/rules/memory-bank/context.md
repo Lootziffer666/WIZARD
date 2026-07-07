@@ -15,30 +15,51 @@ Zielgruppe: Nutzer ohne Unreal-/Programmierkenntnisse ("GUI für Doofis").
 - [x] API-Route `/api/chat` mit Tool-Loop, apiKey aus Settings oder Env
 - [x] ImportModal (JSON-Upload/Paste) + SettingsModal (API-Key/Modell)
 - [x] Beispiel-Katalog mit 16 Assets (src/lib/sampleCatalog.ts)
+- [x] **Echte Asset-Datenbank aus assets.txt**: 2470 Assets (Unity + Fab) geparst
+      und in SQLite (better-sqlite3) mit FTS5-Volltextsuche geladen
+- [x] `src/lib/db.ts`: SQLite/FTS5-Modul, `searchAssets`/`searchLibrary`/`getFacets`
+- [x] `src/app/api/assets/route.ts`: GET-Endpoint (q/category/platform/publisher/limit, action=facets)
+- [x] Chat-Route auf DB-Suche umgestellt (Tool-Schema an echte Felder angepasst,
+      System-Prompt übersetzt DE→EN für Katalog-Suche)
+- [x] GUI lädt Katalog jetzt aus `/api/assets` statt Sample-Katalog
 - [x] typecheck + lint + build grün, commit & push
 
 ## Current Structure
 
 | File/Directory | Purpose |
 |----------------|---------|
-| `src/app/page.tsx` | Haupt-GUI (Galerie + Chat + Modals) |
-| `src/app/api/chat/route.ts` | Claude-Proxy mit `search_assets` Tool-Loop |
+| `src/app/page.tsx` | Haupt-GUI (Galerie + Chat) – lädt Katalog via `/api/assets` |
+| `src/app/api/chat/route.ts` | Claude-Proxy mit DB-`search_assets` Tool-Loop |
+| `src/app/api/assets/route.ts` | Asset-Suche/Facets API (FTS5) |
+| `src/lib/db.ts` | SQLite (better-sqlite3) + FTS5, Seed aus `src/data/assets.json` |
 | `src/lib/types.ts` | Asset/Catalog-Typen |
-| `src/lib/search.ts` | Token-basierte Asset-Suche |
-| `src/lib/sampleCatalog.ts` | 16 Beispiel-Assets |
+| `src/lib/search.ts` | Token-Suche (Client-Galerie, weiter genutzt) |
+| `src/data/assets.json` | Geparste 2470 Assets (Quelle für Seed) |
+| `data/assets.db` | Vorgebaute SQLite-DB (committed) |
+| `scripts/seed.ts` | DB-Seed-Skript |
 | `src/components/AssetGallery.tsx` | Galerie + Filter |
 | `src/components/ChatPanel.tsx` | Chat mit Claude |
 | `src/components/SettingsModal.tsx` | API-Key/Modell |
-| `src/components/ImportModal.tsx` | JSON-Import |
 | `src/components/AssetCard.tsx` | Einzelne Asset-Karte |
 
 ## Current Focus
 
 Nächste sinnvolle Schritte (noch nicht gebaut):
-1. Echten UE-5.8-Asset-Export (MCP/Editor-Utility) → JSON erzeugen
-2. Semantische Suche (Embeddings) statt reiner Token-Suche
-3. Thumbnails aus UE exportieren (Data-URL im Katalog)
-4. Optional: direkte UE-Anbindung via MCP statt nur Katalog-Import
+1. Semantische Suche (Embeddings) statt reiner Token/FTS5-Suche
+2. Kategorie-/Plattform-Filter in der Galerie (aktuell nur Typ + Text)
+3. Thumbnails größer / Lazy-Loading in Galerie
+4. ImportModal wieder aktivieren (aktuell nicht eingebunden)
+
+## Wichtige Hinweise
+
+- **Runtime ist Node** (nicht Bun): `bun:sqlite` funktioniert NICHT; es wird
+  `better-sqlite3` verwendet. `next.config.ts` setzt `serverExternalPackages`.
+- Named-Parameter in better-sqlite3: JS-Objekt-Keys OHNE Sigil (`{id: ...}`),
+  nicht `{ $id: ... }`. Im Code werden daher **positionale `?`** genutzt (sicher
+  für beide Runtimes).
+- `assets.txt` ist ein Browser-Console-Dump (CRLF, JS-Literal-Format). Parser in
+  `/tmp/kilo/parse.mjs` (CRLF-Strip + Feld-Block-Regex).
+- Build braucht `NEXT_TURBOPACK_EXPERIMENTAL_USE_SYSTEM_TLS_CERTS=1` (Google Fonts).
 
 ## Quick Start Guide
 

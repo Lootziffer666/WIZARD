@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { searchAssets } from "@/lib/search";
-import type { AssetType, Catalog } from "@/lib/types";
+import { searchLibrary } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -11,53 +10,45 @@ interface ChatMessage {
 
 interface ChatRequest {
   messages: ChatMessage[];
-  catalog: Catalog;
   apiKey?: string;
   model?: string;
 }
 
-const SYSTEM = `Du bist "AssetPilot", ein hilfsreicher Assistent für Spiele-Entwickler, der bei der Suche in einem Asset-Katalog hilft.
-Der Nutzer hat ein Projekt mit vielen Assets (Meshes, Materialien, Sounds, Blueprints usw.).
-Du siehst NICHT alle Assets auf einmal. Nutze IMMER das Werkzeug "search_assets", um Assets zu finden – basierend auf dem, wonach der Nutzer fragt (Name, Typ, Tags, Poly-Anzahl).
-Wenn du Assets nennst, gib den genauen Namen und den Pfad an, damit der Nutzer sie findet.
+const SYSTEM = `Du bist "AssetPilot", ein hilfsreicher Assistent für Spiele-Entwickler, der bei der Suche in einer großen Asset-Datenbank hilft.
+Die Datenbank enthält echte Assets aus dem Unity Asset Store und Fab (insgesamt mehrere Tausend Einträge).
+Jedes Asset hat: title (Name), category (z.B. "3d/props/weapons", "2d/textures-materials", "audio/sound-fx", "vfx/particles", "tools/animation"), publisher, platform ("unity" oder "fab") und url (Store-Link).
+WICHTIG: Die Katalog-Einträge sind auf ENGLISCH. Wenn der Nutzer auf Deutsch fragt (z.B. "holzige Türen"), übersetze die Suchbegriffe in passende englische Keywords (z.B. "wooden door"), bevor du search_assets aufrufst.
+Du siehst NICHT alle Assets auf einmal. Nutze IMMER das Werkzeug "search_assets", um Assets zu finden – basierend auf dem, wonach der Nutzer fragt (Name, Kategorie, Publisher, Plattform).
+Wenn du Assets nennst, gib den genauen Titel und die url an, damit der Nutzer sie findet.
 Sei kurz und klar. Antworte in der Sprache des Nutzers (meist Deutsch).
-Schlage bei offenen Fragen passende Assets aus dem Katalog vor, statt zu raten.`;
+Schlage bei offenen Fragen passende Assets aus der Datenbank vor, statt zu raten.`;
 
 const TOOLS: Anthropic.Tool[] = [
   {
     name: "search_assets",
     description:
-      "Durchsuche den Asset-Katalog nach Namen, Typ, Tags oder Poly-Anzahl. Gib immer diese Funktion auf, statt Assets aus dem Gedächtnis zu erfinden.",
+      "Durchsuche die Asset-Datenbank nach Titel, Kategorie, Publisher oder Plattform. Gib immer diese Funktion auf, statt Assets aus dem Gedächtnis zu erfinden.",
     input_schema: {
       type: "object",
       properties: {
         query: {
           type: "string",
-          description: "Freitext-Suche, z.B. 'holzige Tuer' oder 'Fels'.",
+          description:
+            "Freitext-Suche im Titel/Name, z.B. 'holzige Tuer' oder 'Fels'.",
         },
-        type: {
+        category: {
           type: "string",
-          enum: [
-            "StaticMesh",
-            "SkeletalMesh",
-            "Material",
-            "Texture",
-            "Blueprint",
-            "Animation",
-            "Sound",
-            "Particle",
-            "Other",
-          ],
-          description: "Optional: nur diesen Asset-Typ.",
+          description:
+            "Optional: Kategorie-Pfad (Präfix), z.B. '3d/props', '2d/textures-materials', 'audio/sound-fx', 'vfx/particles', 'tools'.",
         },
-        tags: {
-          type: "array",
-          items: { type: "string" },
-          description: "Optional: alle diese Tags muessen vorhanden sein.",
+        platform: {
+          type: "string",
+          enum: ["unity", "fab"],
+          description: "Optional: nur diese Plattform.",
         },
-        maxPoly: {
-          type: "number",
-          description: "Optional: maximale Polygonzahl.",
+        publisher: {
+          type: "string",
+          description: "Optional: Teil des Publisher-Namens.",
         },
         limit: {
           type: "number",
@@ -96,7 +87,6 @@ export async function POST(req: Request) {
   }
 
   const model = body.model || "claude-sonnet-4-6";
-  const catalog = Array.isArray(body.catalog) ? body.catalog : [];
   const foundIds = new Set<string>();
 
   const client = new Anthropic({ apiKey });
@@ -128,16 +118,16 @@ export async function POST(req: Request) {
           (tu) => {
             const input = (tu.input ?? {}) as {
               query?: string;
-              type?: AssetType;
-              tags?: string[];
-              maxPoly?: number;
+              category?: string;
+              platform?: string;
+              publisher?: string;
               limit?: number;
             };
-            const results = searchAssets(catalog, {
+            const results = searchLibrary({
               query: input.query ?? "",
-              type: input.type ?? "",
-              tags: input.tags ?? [],
-              maxPoly: input.maxPoly,
+              category: input.category,
+              platform: input.platform,
+              publisher: input.publisher,
               limit: input.limit ?? 20,
             });
             results.forEach((r) => foundIds.add(r.id));
@@ -147,11 +137,11 @@ export async function POST(req: Request) {
               content: JSON.stringify(
                 results.map((r) => ({
                   id: r.id,
-                  name: r.name,
-                  type: r.type,
-                  path: r.path,
-                  tags: r.tags,
-                  polyCount: r.polyCount,
+                  title: r.title,
+                  category: r.category,
+                  platform: r.platform,
+                  publisher: r.publisher,
+                  url: r.url,
                 }))
               ),
             };

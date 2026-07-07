@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Catalog } from "@/lib/types";
 
 interface ChatMsg {
   role: "user" | "assistant";
@@ -21,11 +20,9 @@ const SUGGESTIONS = [
 ];
 
 export default function ChatPanel({
-  catalog,
   settings,
   onFoundIds,
 }: {
-  catalog: Catalog;
   settings: Settings;
   onFoundIds: (ids: string[]) => void;
 }) {
@@ -57,7 +54,6 @@ export default function ChatPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: next,
-          catalog,
           apiKey: settings.apiKey || undefined,
           model: settings.model || undefined,
         }),
