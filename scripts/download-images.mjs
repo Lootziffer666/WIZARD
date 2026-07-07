@@ -1,20 +1,23 @@
-import { mkdirSync, existsSync, writeFileSync, readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  existsSync,
+  writeFileSync,
+  readFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 const ROOT = process.cwd();
 const OUT = join(ROOT, "data", "images");
 mkdirSync(OUT, { recursive: true });
 
-const assets = JSON.parse(
-  readFileSync(join(ROOT, "src/data/assets.json"), "utf8")
+const assets = JSON.parse(readFileSync(join(ROOT, "src/data/assets.json"), "utf8"));
+
+// Alle Assets mit gültiger Bild-URL (Fab + Unity).
+const all = assets.filter(
+  (a) => typeof a.image === "string" && a.image.startsWith("http")
 );
 
-// Nur Fab (wie gewünscht). Für alle: filter entfernen.
-const fab = assets.filter(
-  (a) => a.platform === "fab" && a.image?.startsWith("https://media.fab.com")
-);
-
-const CONCURRENCY = 24;
+const CONCURRENCY = 32;
 let done = 0;
 let ok = 0;
 let fail = 0;
@@ -41,17 +44,17 @@ async function downloadOne(a) {
     fail++;
   } finally {
     done++;
-    if (done % 100 === 0) {
+    if (done % 200 === 0) {
       const sec = ((Date.now() - start) / 1000).toFixed(0);
-      console.log(`[${done}/${fab.length}] ok=${ok} fail=${fail} ${sec}s`);
+      console.log(`[${done}/${all.length}] ok=${ok} fail=${fail} ${sec}s`);
     }
   }
 }
 
 async function run() {
-  console.log(`Downloading ${fab.length} Fab preview images → ${OUT}`);
+  console.log(`Downloading ${all.length} preview images → ${OUT}`);
   let i = 0;
-  const queue = fab.map((a) => a);
+  const queue = all.slice();
   const workers = Array.from({ length: CONCURRENCY }, async () => {
     while (i < queue.length) {
       const a = queue[i++];
@@ -59,7 +62,7 @@ async function run() {
     }
   });
   await Promise.all(workers);
-  console.log(`DONE ok=${ok} fail=${fail} total=${fab.length}`);
+  console.log(`DONE ok=${ok} fail=${fail} total=${all.length}`);
 }
 
 run();
