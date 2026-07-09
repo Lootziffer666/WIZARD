@@ -1,12 +1,260 @@
-# WIZARD — Asset Intelligence Layer\n\n
+# WIZARD
 
-**WIZARD** (vormals Asset Pilot) ist der Produktionsleiter im agentischen Spielestudio-Ökosystem. Er übersetzt Spielideen in passende Assets, fungiert als zentrale Wissensbasis und bildet die Schnittstelle zwischen kreativer Vision und vorhandenem Material.\n\n---\n\n## Was das ist\n\nWIZARD sucht nicht einfach nur in einer Asset-Datenbank – er versteht **Produktionsabsicht**. Der Nutzer beschreibt eine Idee (z.B. *\"Koop-Spiel für Jake und mich in einer staubigen Wüstenstadt mit improvisierter Technik\"*), und WIZARD liefert nicht nur einzelne Assets, sondern:\n\n- **Starter Kits** nach Rolle (Environment, Characters, Props, Materials, Audio, VFX, UI)\n- **Missing-Asset-Listen** – was fehlt noch für die Produktion\n- **semantische Suche** nach Stil, Atmosphäre, Genre – nicht nur nach Namen\n- **Chat-Interface** mit Claude, das die Asset-Datenbank als Werkzeug nutzt\n\n### Stellung im Ökosystem\n\n```\nmini-me (Idee)\n  ↓\nWIZARD (Assets + Starter Kit + Production Brief)\n  ↓\nSWIFT (2D/3D Entscheidung → prozedurale Sprite-Sheets)\n  ↓\nSHADED (Welt-zusammenhalt, visuell ohne Scripting)\n  ↓\nCUE-AGENT (Playability-Prüfung)\n```\n\n**ANVIL** orchestriert den gesamten Prozess. WIZARD ist der Produktionsleiter – er weiß, welche Assets vorhanden sind, welche noch fehlen, und wie eine Idee in vorhandene Mittel übersetzt wird.\n\n---\n\n## Tech Stack\n\n| Layer | Technology |\n|-------|-----------|\n| Framework | Next.js 16 (App Router) |\n| UI | React 19 + Tailwind CSS v4 |\n| Datenbank | SQLite via `@libsql/client` (WASM, kein nativer Build) |\n| AI | Anthropic Claude API (tool-calling, Chat-Interface) |\n| Suche | SQLite FTS5 (Volltextsuche, bm25-Ranking) |\n| Deployment | Vercel (empfohlen) oder ein beliebiger Node.js-Host |\n\n**Wichtig:** Die App nutzt `bun` als Packager. Für Vercel wird automatisch umgestellt.\n\n---\n\n## Features\n\n### 1. Semantische Asset-Suche\n\nDie Datenbank enthält **2.470 Assets** aus Unity Asset Store und Fab. Suche funktioniert nach:\n- Titel/Name\n- Kategorie (z.B. `3d/props`, `audio/sound-fx`, `vfx/particles`)\n- Publisher\n- Plattform (`unity` oder `fab`)\n- **Stil/Atmosphäre** (die Previews wurden ausgewertet): `dusty`, `medieval`, `neon`, `horror`, `sci-fi`, `desert`, `cute`, `urban` …\n- Freitext-Kombinationen davon\n\n### 2. KI-Chat (Claude)\n\nDer Chat rechts in der UI ist ein vollwertiger Claude-Agent mit zwei Werkzeugen:\n\n**`search_assets`** — Freitext-Suche in der Datenbank mit Stil/Atmosphäre, Kategorie, Publisher, Plattform.\n\n**`build_production_brief`** — Aus einer Spielidee (in Deutsch oder Englisch) wird ein vollständiges Starter Kit nach Rollen erzeugt:\n- Environment, Characters, Props, Materials, Audio, VFX, UI\n- pro Rolle bis zu 4 passende Assets\n- Missing-Asset-Liste: welche Rollen sind unterversorgt\n\nDer Chat antwortet auf Deutsch und übersetzt Suchbegriffe bei Bedarf automatisch ins Englische.\n\n### 3. Asset Gallery\n\n- Schnelle client-seitige Volltextsuche über den geladenen Katalog\n- Filter nach Asset-Typ (StaticMesh, SkeletalMesh, Material, Texture, Blueprint, Animation, Sound, Particle)\n- Highlight-Modus: nur die Assets anzeigen, die der KI-Chat gefunden hat\n- Klick auf ein Asset → Modal mit allen Details, Tags und Store-Link\n\n### 4. Healthcheck\n\n`GET /api/health` gibt DB-Status, Pfad, Mode und Asset-Count zurück. Für Debugging und Deployment-Validierung.\n\n---\n\n## Setup\n\n### Voraussetzungen\n\n- Node.js 20+ oder Bun 1.x\n- Git\n\n### Lokal\n\n```bash\ngit clone https://github.com/Lootziffer666/WIZARD.git\ncd WIZARD\nbun install          # ← bun, nicht npm\nbun dev             # → http://localhost:3000\n```\n\n**Hinweis:** Die App nutzt `bun` als Runtime. Falls Du mit npm lieber arbeitest, ersetze `bun` durch `npm` in allen Befehlen – das funktioniert, aber der Lockfile ist für bun optimiert.\n\nBeim ersten Start wird die Datenbank automatisch aus `src/data/assets.json` (1.1 MB, 2.470 Assets) gesetzt.\n\n### API-Key eintragen\n\nOben rechts auf ⚙️ → API-Key klicken → Deinen Anthropic-API-Key eintragen. Der Key wird in `localStorage` gespeichert und nie an Dritte übertragen.\n\n---\n\n## Datenbank\n\n### Struktur\n\n```sql\nassets (\n  id TEXT PRIMARY KEY,\n  title TEXT,\n  category TEXT,        -- z.B. \"3d/props/weapons\"\n  publisher TEXT,\n  platform TEXT,        -- \"unity\" oder \"fab\"\n  url TEXT,             -- Store-Link\n  image TEXT,           -- CDN-Preview-URL\n  addedAt INTEGER,\n  analysis TEXT         -- KI-Analyse-Feld (Platz für später)\n)\n\nassets_fts (FTS5 virtual table)\n  id, title, category, publisher, analysis\n  tokenize = unicode61\n```\n\n### Modi\n\n**Lokal (Standard für Development und Self-Hosting):**\n```env\nDATABASE_PATH=./data/assets.db\n```\n→ LibSQL öffnet die lokale SQLite-Datei.\n\n**Remote (Turso/Cloudflare D1 etc.):**\n```env\nDATABASE_URL=libsql://your-db.turso.io\nDATABASE_AUTH_TOKEN=your-token\n```\n→ LibSQL verbindet sich zu einer Remote-DB. Der lokale Seed entfällt.\n\n### DB erweitern / Assets hinzufügen\n\nNeue Assets in `src/data/assets.json` im gleichen Format eintragen. Beim nächsten Start werden sie automatisch in die DB übernommen (Seed-Schutz: nur wenn `COUNT(*) == 0`).\n\n---\n\n## Deployment auf Vercel (empfohlen)\n\n### 1. Auf GitHub pushen\n\nFalls noch nicht passiert:\n\n```bash\ngit remote add origin https://github.com/DEIN-USERNAME/WIZARD.git\ngit push -u origin main\n```\n\n### 2. Auf Vercel importieren\n\n1. [vercel.com](https://vercel.com) → New Project → GitHub-Repo auswählen\n2. Framework: **Next.js** (erkannt automatisch)\n3. Root Directory: `.` (oder `wizard/`)\n4. **Environment Variables** hinzufügen:\n   - `ANTHROPIC_API_KEY` → Dein Claude API Key\n   - `DATABASE_URL` (optional, nur bei Turso/Remote-DB)\n   - `DATABASE_AUTH_TOKEN` (optional, nur bei Turso)\n5. Deploy klicken\n\n### 3. Eigene Domain\n\nIn Vercel → Project Settings → Domains → Deine Domain eintragen. DNS-Records gemäß Vercel-Anleitung setzen.\n\n---\n\n## Dateistruktur\n\n```\nWIZARD/\n├── assetpilot.md          # Brainstorming-Dokument (Vision, Pipeline, Roadmap)\n├── src/\n│   ├── app/\n│   │   ├── page.tsx              # Hauptseite (Gallery + Chat)\n│   │   ├── layout.tsx            # App-Shell\n│   │   ├── api/\n│   │   │   ├── assets/route.ts    # GET /api/assets?q=&category=&platform=…\n│   │   │   ├── chat/route.ts     # POST /api/chat (Claude + Tool-Calling)\n│   │   │   ├── health/route.ts    # GET /api/health (DB-Status)\n│   │   │   └── image/[id]/      # GET /api/image/:id (Thumbnail-Proxy)\n│   ├── components/\n│   │   ├── AssetGallery.tsx      # Such-Gallery + Filter\n│   │   ├── AssetCard.tsx         # Einzelne Asset-Karte\n│   │   ├── ChatPanel.tsx          # KI-Chat-Interface\n│   │   ├── ImportModal.tsx       # (vorhanden, ggf. für Import nutzen)\n│   │   └── SettingsModal.tsx       # API-Key-Einstellungen\n│   ├── lib/\n│   │   ├── db.ts                 # LibSQL-Client + alle DB-Operationen\n│   │   ├── brief.ts               # buildProductionBrief() für Starter Kits\n│   │   ├── search.ts              # Client-seitige Such-Hilfsfunktion\n│   │   ├── types.ts               # TypeScript-Typen\n│   │   └── sampleCatalog.ts      # Fallback-Katalog (Deutsch, nicht genutzt)\n│   └── data/\n│       └── assets.json            # Seed-Datei (2.470 Assets, 1.1 MB)\n├── data/\n│   ├── assets.db                  # Laufzeit-DB (wird bei erstem Start erstellt)\n│   └── images/                    # 2.470 .img-Thumbnails\n├── package.json\n├── next.config.ts\n├── tsconfig.json\n└── bun.lock(b)                    # Bun Lockfile (npm-kompatibel)\n```\n\n---\n\n## Nächste Schritte (Roadmap)\n\n### Sofort / Quick Wins\n\n1. **Vercel-Deploy** — Dein Sohn und Du sollten von überall darauf zugreifen können. Das ist der wichtigste Schritt.\n2. **Thumbnail-Check** — Die `/api/image/[id]`-Route funktioniert für lokale `.img`-Dateien. Bei Vercel-Deployment ohne Images-Ordner wird auf die CDN-URL aus der DB redirectet. Prüfen ob das reicht oder ob ein Blob-Storage nötig ist.\n3. **Production-Brief als Export** — `buildProductionBrief()` gibt bereits gute Ergebnisse. Ein \"Speichern\"-Button der das Ergebnis als Markdown/JSON exportiert wäre sofort nützlich.\n\n### Mittelfristig\n\n4. **Missing-Asset-Workflow** — Die Missing-Asset-Liste aus dem Production Brief wird zu einem echten Ticket/Issue. Später könnte ANVIL das als Feedback-Loop nutzen.\n5. **SWIFT-Integration** — SWIFT kann aus FBX-Modellen Sprite-Sheets für SHADED erzeugen. Eine \"SWIFT-Anfrage starten\"-Action in WIZARD, die die CLI von SWIFT aufruft und das Ergebnis in SHADED zeigt.\n6. **Mehrsprachigkeit** — UI bisher auf Deutsch. Chat versteht Deutsch/Englisch gemischt. Wenn Dein Sohn lieber auf Englisch arbeitet, wäre ein Toggle sinnvoll.\n\n### Architecture / Größere Vorhaben\n\n7. **ANVIL als Orchestrator** — WIZARD weiß welche Assets es hat und welche fehlen. ANVIL treibt dann den Prozess: Idee → WIZARD → SWIFT → SHADED → CUE-AGENT → Feedback → Iteration.\n8. **Turso-Remote-DB** — Für den Fall dass die lokale SQLite auf Dauer nicht reicht (Multi-User, Synchronisation zwischen Geräten). Turso hat ein generous Free-Tier.\n9. **3D-RE-GEN** — Eigenes Tool als Alternative zum externen Projekt. WIZARD bekommt dann von einer Referenz-Image-Analyse eine Objektliste, Raumstruktur und Bodenhöhe — und kann davon ausgehend passende Assets vorschlagen.\n10. **User-spezifische Erfahrung** — WIZARD soll mit der Zeit lernen was gut zusammepasst (\"dieses Asset funktioniert in staubigen Wüsten-Szenen, aber nicht in Schnee\"). Das Analysis-Feld in der DB ist dafür vorbereitet.\n\n---\n\n## Kurzbefehle\n\n```bash\nbun dev          # Development-Server\nbun build        # Production-Build\nbun start        # Production-Server\nbun typecheck    # TypeScript-Prüfung\nbun lint         # ESLint\n
+**Production Lead in the Agent-Driven Game Studio Ecosystem**
 
+WIZARD (formerly Asset Pilot) translates game ideas into suitable assets, serves as the central knowledge base, and acts as the interface between creative vision and available materials.
 
+---
 
+## Overview
 
+WIZARD is not just a simple asset database search tool—it understands production intent. Users describe an idea (e.g., "a coop game for Jake and me in a dusty desert town with improvised tech"), and WIZARD delivers not only individual assets but:
 
+- Role-based starter kits (Environment, Characters, Props, Materials, Audio, VFX, UI)
+- Missing asset lists—what's still needed for production
+- Semantic search by style, atmosphere, genre—not just by name
+- Chat interface powered by Claude that uses the asset database as a tool
 
+### Position in the Ecosystem
 
+```
+mini-me (Idea)
+ ↓
+WIZARD (Assets + Starter Kit + Production Brief)
+ ↓
+SWIFT (2D/3D Decision → Procedural Sprite Sheets)
+ ↓
+SHADED (World Cohesion, visuals without scripting)
+ ↓
+CUE-AGENT (Playability Check)
+```
 
+ANVIL orchestrates the entire process. WIZARD is the production lead—it knows which assets are available, which are missing, and how to translate an idea into existing resources.
 
+---
+
+## Tech Stack
+
+| Layer      | Technology                   |
+|------------|------------------------------|
+| Framework  | Next.js 16 (App Router)      |
+| UI         | React 19 + Tailwind CSS v4   |
+| Database   | SQLite via @libsql/client (WASM, no native build) |
+| AI         | Anthropic Claude API (tool-calling, Chat Interface) |
+| Search     | SQLite FTS5 (Full-text search, bm25 ranking) |
+| Deployment | Vercel (recommended) or any Node.js host |
+
+Important: The app uses bun as the package manager. For Vercel, it automatically switches.
+
+---
+
+## Features
+
+### 1. Semantic Asset Search
+
+The database contains 2,470 assets from the Unity Asset Store and Fab. Search works by:
+- Title/Name
+- Category (e.g., 3d/props, audio/sound-fx, vfx/particles)
+- Publisher
+- Platform (unity or fab)
+- Style/Atmosphere (evaluated from previews): dusty, medieval, neon, horror, sci-fi, desert, cute, urban …
+- Free-text combinations
+
+### 2. AI Chat (Claude)
+
+The chat interface on the right in the UI is a full-featured Claude agent with two tools:
+
+**search_assets** — Free-text search in the database with style/atmosphere, category, publisher, and platform.
+
+**build_production_brief** — From a game idea (in German or English), a complete role-based starter kit is generated:
+- Environment, Characters, Props, Materials, Audio, VFX, UI
+- Up to 4 suitable assets per role
+- Missing asset list: which roles are underserved
+
+The chat responds in German and automatically translates search terms to English when necessary.
+
+### 3. Asset Gallery
+
+- Fast client-side full-text search across the loaded catalog
+- Filter by asset type (StaticMesh, SkeletalMesh, Material, Texture, Blueprint, Animation, Sound, Particle)
+- Highlight mode: show only assets found by the AI chat
+- Clicking an asset opens a modal with all details, tags, and store link
+
+### 4. Healthcheck
+
+GET `/api/health` returns DB status, path, mode, and asset count. Used for debugging and deployment validation.
+
+---
+
+## Setup
+
+### Prerequisites
+
+- Node.js 20+ or Bun 1.x
+- Git
+
+### Local Setup
+
+```bash
+git clone https://github.com/Lootziffer666/WIZARD.git
+cd WIZARD
+bun install # ← bun, not npm
+bun dev # → http://localhost:3000
+```
+
+> Note: The app uses bun as its runtime. If you prefer npm, you can replace bun with npm in all commands—it works, but the lockfile is optimized for bun.
+
+When first started, the database is automatically created from `src/data/assets.json` (1.1 MB, 2,470 assets).
+
+### Adding API Key
+
+Click the ⚙️ icon in the top right → click on API Key → enter your Anthropic API key. The key is stored in localStorage and never transmitted to third parties.
+
+---
+
+## Database
+
+### Structure
+
+```sql
+assets (
+ id TEXT PRIMARY KEY,
+ title TEXT,
+ category TEXT, -- e.g. "3d/props/weapons"
+ publisher TEXT,
+ platform TEXT, -- "unity" or "fab"
+ url TEXT, -- Store link
+ image TEXT, -- CDN preview URL
+ addedAt INTEGER,
+ analysis TEXT -- AI analysis field (room for later)
+)
+
+assets_fts (FTS5 virtual table)
+ id, title, category, publisher, analysis
+ tokenize = unicode61
+```
+
+### Modes
+
+**Local (default for development and self-hosting):**
+
+```env
+DATABASE_PATH=./data/assets.db
+```
+
+→ LibSQL opens the local SQLite file.
+
+**Remote (Turso/Cloudflare D1, etc.):**
+
+```env
+DATABASE_URL=libsql://your-db.turso.io
+DATABASE_AUTH_TOKEN=your-token
+```
+
+→ LibSQL connects to a remote database. The local seed is bypassed.
+
+### Adding/Extending the Database
+
+To add new assets, add them to `src/data/assets.json` following the same format. They will be automatically added to the database on the next start (seed protection: only when `COUNT(*) == 0`).
+
+---
+
+## Deployment on Vercel (Recommended)
+
+### 1. Push to GitHub
+
+If not done yet:
+
+```bash
+git remote add origin https://github.com/YOUR-USERNAME/WIZARD.git
+git push -u origin main
+```
+
+### 2. Import on Vercel
+
+1. Go to [vercel.com](https://vercel.com) → New Project → Select your GitHub repo
+2. Framework: Next.js (detected automatically)
+3. Root Directory: `.` (or `wizard/`)
+4. Add Environment Variables:
+   - `ANTHROPIC_API_KEY` → Your Claude API Key
+   - `DATABASE_URL` (optional, only for Turso/Remote DB)
+   - `DATABASE_AUTH_TOKEN` (optional, only for Turso)
+5. Click Deploy
+
+### 3. Custom Domain
+
+In Vercel → Project Settings → Domains → Enter your domain. Set DNS records according to Vercel's instructions.
+
+---
+
+## File Structure
+
+```
+WIZARD/
+├── assetpilot.md # Brainstorming document (Vision, Pipeline, Roadmap)
+├── src/
+│ ├── app/
+│ │ ├── page.tsx # Main page (Gallery + Chat)
+│ │ ├── layout.tsx # App Shell
+│ │ ├── api/
+│ │ │ ├── assets/route.ts # GET /api/assets?q=&category=&platform=…
+│ │ │ ├── chat/route.ts # POST /api/chat (Claude + Tool-Calling)
+│ │ │ ├── health/route.ts # GET /api/health (DB Status)
+│ │ │ └── image/[id]/ # GET /api/image/:id (Thumbnail Proxy)
+│ ├── components/
+│ │ ├── AssetGallery.tsx # Search Gallery + Filter
+│ │ ├── AssetCard.tsx # Individual Asset Card
+│ │ ├── ChatPanel.tsx # AI Chat Interface
+│ │ ├── ImportModal.tsx # (Present, possibly for import use)
+│ │ └── SettingsModal.tsx # API Key Settings
+│ ├── lib/
+│ │ ├── db.ts # LibSQL Client + All DB Operations
+│ │ ├── brief.ts # buildProductionBrief() for Starter Kits
+│ │ ├── search.ts # Client-Side Search Helpers
+│ │ ├── types.ts # TypeScript Types
+│ │ └── sampleCatalog.ts # Fallback Catalog (German, unused)
+│ └── data/
+│ └── assets.json # Seed File (2,470 Assets, 1.1 MB)
+├── data/
+│ ├── assets.db # Runtime DB (Created on first start)
+│ └── images/ # 2,470 .img Thumbnails
+├── package.json
+├── next.config.ts
+├── tsconfig.json
+└── bun.lock(b) # Bun Lockfile (npm-compatible)
+```
+
+---
+
+## Roadmap
+
+### Immediate / Quick Wins
+
+1. **Vercel Deployment** — You and your son should be able to access it from anywhere. This is the most important step.
+2. **Thumbnail Check** — `/api/image/[id]` works for local `.img` files. In Vercel deployment without the images folder, it redirects to the CDN URL from the database. Check if that's sufficient or if blob storage is needed.
+3. **Export Production Brief** — `buildProductionBrief()` already yields good results. A "Save" button to export the result as Markdown/JSON would be immediately useful.
+
+### Mid-Term
+
+4. **Missing Asset Workflow** — The missing asset list from the production brief becomes a real ticket/issue. Later, ANVIL could use this as a feedback loop.
+5. **SWIFT Integration** — SWIFT can generate sprite sheets for SHADED from FBX models. A "Start SWIFT Request" action in WIZARD that calls the SWIFT CLI and shows the result in SHADED.
+6. **Multilingual Support** — UI is currently in German. Chat understands mixed German/English. If your son prefers to work in English, a toggle would be useful.
+
+### Architecture / Larger Projects
+
+7. **ANVIL as Orchestrator** — WIZARD knows which assets it has and which are missing. ANVIL then drives the process: Idea → WIZARD → SWIFT → SHADED → CUE-AGENT → Feedback → Iteration.
+8. **Turso Remote DB** — In case the local SQLite doesn't suffice in the long term (multi-user, device synchronization). Turso has a generous free tier.
+9. **3D-RE-GEN** — Own tool as an alternative to external projects. WIZARD receives an object list, room structure, and floor height from a reference image analysis—and can then suggest appropriate assets.
+10. **User-Specific Experience** — Over time, WIZARD should learn which assets go well together ("this asset works in dusty desert scenes, but not in snow"). The `analysis` field in the DB is prepared for this.
+
+---
+
+## Short Commands
+
+```bash
+bun dev # Development server
+bun build # Production build
+bun start # Production server
+bun typecheck # TypeScript check
+bun lint # ESLint
+```
