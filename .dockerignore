@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+build
+.git
+.gitignore
+.github
+.kilocode
+.kilo
+.kiro
+.claude
+*.md
+.env*
+npm-debug.log*
+Dockerfile
+.dockerignore
