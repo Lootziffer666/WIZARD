@@ -1,5 +1,4 @@
-import Database from "better-sqlite3";
-import type { Database as DatabaseType } from "better-sqlite3";
+import { createClient, type Client } from "@libsql/client";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Asset, AssetType } from "./types";
@@ -13,6 +12,7 @@ export interface LibraryAsset {
   url: string;
   image: string;
   addedAt: number;
+  analysis: string;
 }
 
 export interface SearchParams {
@@ -30,10 +30,22 @@ export interface Facets {
   publishers: string[];
 }
 
-const DB_PATH = join(process.cwd(), "data", "assets.db");
-const SEED_PATH = join(process.cwd(), "src", "data", "assets.json");
+// Stable path: always resolve relative to the project root, not cwd
+function projectRoot(): string {
+  // In production (Vercel/Kilo) process.cwd() can be unreliable
+  // Use import.meta.url to get a stable reference
+  try {
+    const { fileURLToPath } = require("node:url");
+    return fileURLToPath(new URL("../", import.meta.url));
+  } catch {
+    return process.cwd();
+  }
+}
 
-const g = globalThis as unknown as { __assetsDb?: DatabaseType };
+const DB_PATH = process.env.DATABASE_PATH ?? join(projectRoot(), "data", "assets.db");
+const SEED_PATH = join(projectRoot(), "src", "data", "assets.json");
+
+const g = globalThis as unknown as { __assetsDb?: Client; __dbReady?: boolean };
 
 function deriveType(category: string): AssetType {
   const c = category.toLowerCase();
@@ -63,8 +75,8 @@ export function toAsset(row: LibraryAsset): Asset {
   };
 }
 
-function ensureSchema(db: DatabaseType) {
-  db.exec(`
+function ensureSchema(db: Client) {
+  db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS assets (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -91,50 +103,49 @@ function ensureSchema(db: DatabaseType) {
   `);
 }
 
-function seedIfEmpty(db: DatabaseType) {
-  const count = (db.prepare("SELECT COUNT(*) AS c FROM assets").get() as {
-    c: number;
-  }).c;
+async function seedIfEmpty(db: Client) {
+  const result = db.execute("SELECT COUNT(*) AS c FROM assets");
+  const count = result.rows[0]?.c ?? 0;
   if (count > 0) return;
   if (!existsSync(SEED_PATH)) {
     throw new Error(`Seed file not found: ${SEED_PATH}`);
   }
   const assets = JSON.parse(readFileSync(SEED_PATH, "utf8")) as LibraryAsset[];
 
-  const insertAsset = db.prepare(
-    `INSERT OR REPLACE INTO assets (id, title, category, publisher, platform, url, image, addedAt, analysis)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  const insertFts = db.prepare(
-    `INSERT INTO assets_fts (id, title, category, publisher, analysis) VALUES (?, ?, ?, ?, ?)`
-  );
-
-  const tx = db.transaction((rows: LibraryAsset[]) => {
-    for (const a of rows) {
-      insertAsset.run(
-        a.id,
-        a.title,
-        a.category,
-        a.publisher,
-        a.platform,
-        a.url,
-        a.image,
-        a.addedAt,
-        ""
-      );
-      insertFts.run(a.id, a.title, a.category, a.publisher, "");
-    }
-  });
-  tx(assets);
+  for (const a of assets) {
+    await db.execute(
+      `INSERT OR REPLACE INTO assets (id, title, category, publisher, platform, url, image, addedAt, analysis)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [a.id, a.title, a.category, a.publisher, a.platform, a.url, a.image, a.addedAt, ""]
+    );
+    await db.execute(
+      `INSERT INTO assets_fts (id, title, category, publisher, analysis) VALUES (?, ?, ?, ?, ?)`,
+      [a.id, a.title, a.category, a.publisher, ""]
+    );
+  }
 }
 
-export function getDb(): DatabaseType {
+export function getDb(): Client {
   if (g.__assetsDb) return g.__assetsDb;
-  const dir = join(process.cwd(), "data");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  const db = new Database(DB_PATH);
+
+  const dbUrl = process.env.DATABASE_URL;
+  const db = createClient(
+    dbUrl
+      ? { url: dbUrl }
+      : {
+          // Local file-based SQLite (dev + some serverless deployments)
+          url: `file:${DB_PATH}`,
+        }
+  );
+
   ensureSchema(db);
-  seedIfEmpty(db);
+
+  // Seed synchronously on first access for local file mode
+  // (for remote turso urls the seed runs async in the background)
+  if (!dbUrl) {
+    seedIfEmpty(db).catch(console.error);
+  }
+
   g.__assetsDb = db;
   return db;
 }
@@ -158,12 +169,11 @@ export function searchLibrary(params: SearchParams = {}): LibraryAsset[] {
     platform,
     publisher,
     limit = 60,
-    or = false,
   } = params;
-  const match = buildMatch(query, or ? "or" : "and");
+  const match = buildMatch(query, "and");
 
   const clauses: string[] = [];
-  const bind: unknown[] = [];
+  const bind: (string | number)[] = [];
 
   if (match) {
     clauses.push("assets_fts MATCH ?");
@@ -198,7 +208,9 @@ export function searchLibrary(params: SearchParams = {}): LibraryAsset[] {
        LIMIT ?`;
 
   bind.push(limit);
-  return db.prepare(sql).all(...bind) as LibraryAsset[];
+
+  const result = db.execute({ sql, args: bind });
+  return result.rows as unknown as LibraryAsset[];
 }
 
 export function searchAssets(params: SearchParams = {}): Asset[] {
@@ -207,56 +219,49 @@ export function searchAssets(params: SearchParams = {}): Asset[] {
 
 export function updateAnalysis(id: string, analysis: string): void {
   const db = getDb();
-  db.prepare("UPDATE assets SET analysis = ? WHERE id = ?").run(analysis, id);
-  db.prepare("UPDATE assets_fts SET analysis = ? WHERE id = ?").run(
-    analysis,
-    id
-  );
+  db.execute({ sql: "UPDATE assets SET analysis = ? WHERE id = ?", args: [analysis, id] });
+  db.execute({ sql: "UPDATE assets_fts SET analysis = ? WHERE id = ?", args: [analysis, id] });
 }
 
 export function getUnanalyzedIds(limit = 1000): string[] {
   const db = getDb();
-  return (
-    db
-      .prepare(
-        "SELECT id FROM assets WHERE analysis IS NULL OR analysis = '' LIMIT ?"
-      )
-      .all(limit) as { id: string }[]
-  ).map((r) => r.id);
+  const result = db.execute({
+    sql: "SELECT id FROM assets WHERE analysis IS NULL OR analysis = '' LIMIT ?",
+    args: [limit],
+  });
+  return result.rows.map((r) => (r as { id: string }).id);
 }
 
 export function countAnalyzed(): { total: number; analyzed: number } {
   const db = getDb();
-  const total = (db.prepare("SELECT COUNT(*) c FROM assets").get() as {
-    c: number;
-  }).c;
-  const analyzed = (
-    db.prepare(
-      "SELECT COUNT(*) c FROM assets WHERE analysis IS NOT NULL AND analysis != ''"
-    ).get() as { c: number }
-  ).c;
-  return { total, analyzed };
+  const total = db.execute("SELECT COUNT(*) c FROM assets");
+  const analyzed = db.execute(
+    "SELECT COUNT(*) c FROM assets WHERE analysis IS NOT NULL AND analysis != ''"
+  );
+  return {
+    total: total.rows[0]?.c ?? 0,
+    analyzed: analyzed.rows[0]?.c ?? 0,
+  };
 }
 
 export function getFacets(): Facets {
   const db = getDb();
-  const total = (db.prepare("SELECT COUNT(*) AS c FROM assets").get() as {
-    c: number;
-  }).c;
-  const platforms = (
-    db.prepare("SELECT DISTINCT platform FROM assets ORDER BY platform").all() as {
-      platform: string;
-    }[]
-  ).map((r) => r.platform);
-  const categories = (
-    db.prepare("SELECT DISTINCT category FROM assets ORDER BY category").all() as {
-      category: string;
-    }[]
-  ).map((r) => r.category);
-  const publishers = (
-    db.prepare("SELECT DISTINCT publisher FROM assets ORDER BY publisher").all() as {
-      publisher: string;
-    }[]
-  ).map((r) => r.publisher);
-  return { total, platforms, categories, publishers };
+  const total = db.execute("SELECT COUNT(*) AS c FROM assets");
+  const platforms = db.execute("SELECT DISTINCT platform FROM assets ORDER BY platform");
+  const categories = db.execute("SELECT DISTINCT category FROM assets ORDER BY category");
+  const publishers = db.execute("SELECT DISTINCT publisher FROM assets ORDER BY publisher");
+  return {
+    total: total.rows[0]?.c ?? 0,
+    platforms: platforms.rows.map((r) => (r as { platform: string }).platform),
+    categories: categories.rows.map((r) => (r as { category: string }).category),
+    publishers: publishers.rows.map((r) => (r as { publisher: string }).publisher),
+  };
+}
+
+export function getDbStats(): { total: number; dbPath: string; mode: string } {
+  return {
+    total: (getDb().execute("SELECT COUNT(*) c FROM assets").rows[0]?.c ?? 0) as number,
+    dbPath: DB_PATH,
+    mode: process.env.DATABASE_URL ? "remote (libsql/turso)" : "local (file)",
+  };
 }

@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3"],
+  // No serverExternalPackages needed – libsql is WASM, no native modules
 };
 
 export default nextConfig;

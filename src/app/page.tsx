@@ -33,8 +33,9 @@ export default function Home() {
       .then((data) => {
         if (active) setCatalog(data.assets ?? []);
       })
-      .catch(() => {
-        /* ignore */
+      .catch((err) => {
+        console.error("[AssetGallery] Failed to load catalog:", err);
+        setCatalog([]);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -61,7 +62,7 @@ export default function Home() {
             🛰️ AssetPilot{" "}
             <span className="text-xs font-normal text-neutral-500">
               KI-Asset-Suche ·{" "}
-              {loading ? "lade…" : `${catalog.length} Assets (DB)`}
+              {loading ? "lade…" : `${catalog.length} Assets${catalog.length === 0 ? " (DB fehlt – s. Einstellungen)" : ""}`}
             </span>
           </h1>
         </div>
