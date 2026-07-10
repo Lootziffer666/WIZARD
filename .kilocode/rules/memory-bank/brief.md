@@ -45,7 +45,7 @@ Pipeline (Endziel):
 
 ## Aktueller, bereits gebauter Stand (MVP-Basis)
 
-- SQLite-DB (`better-sqlite3`, FTS5) mit 2.470 Assets, API `/api/assets`.
+- SQLite-DB (`@libsql/client`, FTS5) mit 2.470 Assets, API `/api/assets`.
 - KI-Chat (`/api/chat`) mit `search_assets`-Tool gegen die DB.
 - Lokale Preview-Bilder (`data/images/<id>.img`) + `/api/image/[id]`.
 - GUI (Galerie + Chat) lädt Katalog aus der DB.

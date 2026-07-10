@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { Asset, Catalog } from "@/lib/types";
+import type { Asset } from "@/lib/types";
 import AssetGallery from "@/components/AssetGallery";
 import ChatPanel from "@/components/ChatPanel";
 import SettingsModal, { type Settings } from "@/components/SettingsModal";
 
 export default function Home() {
-  const [catalog, setCatalog] = useState<Catalog>([]);
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [foundIds, setFoundIds] = useState<Set<string>>(new Set());
   const [settings, setSettings] = useState<Settings>(() => {
@@ -28,14 +28,14 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/assets?limit=3000")
+    fetch("/api/assets?action=stats")
       .then((r) => r.json())
       .then((data) => {
-        if (active) setCatalog(data.assets ?? []);
+        if (active) setTotal(typeof data.total === "number" ? data.total : 0);
       })
       .catch((err) => {
-        console.error("[AssetGallery] Failed to load catalog:", err);
-        setCatalog([]);
+        console.error("[Home] Failed to load stats:", err);
+        if (active) setTotal(0);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -62,7 +62,7 @@ export default function Home() {
             🛰️ AssetPilot{" "}
             <span className="text-xs font-normal text-neutral-500">
               KI-Asset-Suche ·{" "}
-              {loading ? "lade…" : `${catalog.length} Assets${catalog.length === 0 ? " (DB fehlt – s. Einstellungen)" : ""}`}
+              {loading ? "lade…" : `${total ?? 0} Assets${total === 0 ? " (DB fehlt – s. Einstellungen)" : ""}`}
             </span>
           </h1>
         </div>
@@ -79,7 +79,6 @@ export default function Home() {
       <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1.4fr_1fr]">
         <section className="border-b border-neutral-800 md:border-b-0 md:border-r">
           <AssetGallery
-            catalog={catalog}
             foundIds={foundIds}
             onPick={setSelected}
           />

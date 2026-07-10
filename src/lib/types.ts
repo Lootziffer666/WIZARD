@@ -21,12 +21,3 @@ export interface Asset {
   sizeMb?: number;
 }
 
-export type Catalog = Asset[];
-
-export interface SearchParams {
-  query?: string;
-  type?: AssetType | "";
-  tags?: string[];
-  maxPoly?: number;
-  limit?: number;
-}

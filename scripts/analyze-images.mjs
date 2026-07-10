@@ -1,10 +1,10 @@
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 import Anthropic from "@anthropic-ai/sdk";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = process.cwd();
-const DB_PATH = join(ROOT, "data", "assets.db");
+const DB_PATH = process.env.DATABASE_PATH ?? join(ROOT, "data", "assets.db");
 const IMAGES_DIR = join(ROOT, "data", "images");
 
 const MODE = process.argv.includes("--vision") ? "vision" : "heuristic";
@@ -14,18 +14,18 @@ const MODEL =
   process.env.ANTHROPIC_MODEL ||
   "claude-haiku-4-5-20251001";
 
-const db = new Database(DB_PATH);
-db.exec("PRAGMA journal_mode = WAL");
+const db = createClient({ url: `file:${DB_PATH}` });
 // Spalte ggf. nachrüsten (falls DB manuell ohne Schema angelegt wurde)
 try {
-  db.exec("ALTER TABLE assets ADD COLUMN analysis TEXT");
+  await db.execute("ALTER TABLE assets ADD COLUMN analysis TEXT");
 } catch {
   /* existiert schon */
 }
 
-const rows = db
-  .prepare("SELECT id, title, category, platform, image FROM assets")
-  .all();
+const rowsResult = await db.execute(
+  "SELECT id, title, category, platform, image FROM assets"
+);
+const rows = rowsResult.rows;
 
 // ---------- Heuristik (kein API-Key nötig) ----------
 const CAT_WORDS = {
@@ -88,7 +88,6 @@ const CAT_WORDS = {
 
 const TITLE_WORDS = {
   desert: "desert sand dry",
-  dust: "dust dusty",
   dust: "dust dusty",
   ruin: "ruin abandoned broken",
   ruined: "ruin abandoned",
@@ -209,18 +208,16 @@ async function visionTags(id) {
 }
 
 // ---------- Loop ----------
-const updA = db.prepare("UPDATE assets SET analysis = ? WHERE id = ?");
-const updF = db.prepare("UPDATE assets_fts SET analysis = ? WHERE id = ?");
-
 let done = 0;
 let changed = 0;
 const start = Date.now();
 
 async function processOne(row) {
-  const existing = db
-    .prepare("SELECT analysis FROM assets WHERE id = ?")
-    .get(row.id);
-  if (!FORCE && existing && existing.analysis) {
+  const existing = await db.execute({
+    sql: "SELECT analysis FROM assets WHERE id = ?",
+    args: [row.id],
+  });
+  if (!FORCE && existing.rows[0]?.analysis) {
     done++;
     return;
   }
@@ -231,8 +228,13 @@ async function processOne(row) {
     tags = heuristicTags(row.category, row.title);
   }
   if (tags) {
-    updA.run(tags, row.id);
-    updF.run(tags, row.id);
+    await db.batch(
+      [
+        { sql: "UPDATE assets SET analysis = ? WHERE id = ?", args: [tags, row.id] },
+        { sql: "UPDATE assets_fts SET analysis = ? WHERE id = ?", args: [tags, row.id] },
+      ],
+      "write"
+    );
     changed++;
   }
   done++;

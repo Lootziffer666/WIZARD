@@ -138,18 +138,17 @@ export async function POST(req: Request) {
 
         conv.push({ role: "assistant", content: message.content });
 
-        const toolResults: Anthropic.ToolResultBlockParam[] = toolUses.map(
-          (tu) => {
+        const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+          toolUses.map(async (tu): Promise<Anthropic.ToolResultBlockParam> => {
             if (tu.name === "build_production_brief") {
               const input = tu.input as { brief?: string; maxPerRole?: number };
-              const result = buildProductionBrief(
+              const result = await buildProductionBrief(
                 input.brief ?? "",
                 input.maxPerRole ?? 4
               );
-              result.starterKit &&
-                Object.values(result.starterKit).forEach((arr) =>
-                  arr.forEach((a) => foundIds.add(a.id))
-                );
+              Object.values(result.starterKit).forEach((arr) =>
+                arr.forEach((a) => foundIds.add(a.id))
+              );
               return {
                 type: "tool_result",
                 tool_use_id: tu.id,
@@ -164,7 +163,7 @@ export async function POST(req: Request) {
               publisher?: string;
               limit?: number;
             };
-            const results = searchLibrary({
+            const results = await searchLibrary({
               query: input.query ?? "",
               category: input.category,
               platform: input.platform,
@@ -186,7 +185,7 @@ export async function POST(req: Request) {
                 }))
               ),
             };
-          }
+          })
         );
 
         conv.push({ role: "user", content: toolResults });

@@ -41,7 +41,7 @@ durchzublättern.
 
 ## Integrationspunkte
 
-- DB: `src/lib/db.ts` (better-sqlite3 + FTS5), `data/assets.db`.
+- DB: `src/lib/db.ts` (@libsql/client + FTS5), `data/assets.db`.
 - Bilder: `data/images/<id>.img`, Route `/api/image/[id]`.
 - KI: Anthropic SDK in `/api/chat`.
 - Geplant: Templates-Quellen, Stil-Metadaten, 3D-RE-GEN, SHADED, ANVIL, CUE-AGENT.

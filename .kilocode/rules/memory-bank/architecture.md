@@ -15,11 +15,11 @@ src/
 │   ├── AssetGallery.tsx, AssetCard.tsx, ChatPanel.tsx,
 │   └── SettingsModal.tsx
 ├── lib/
-│   ├── db.ts                    # SQLite (better-sqlite3) + FTS5, Seed aus assets.json
-│   ├── types.ts                 # Asset/Catalog-Typen
-│   └── search.ts                # Token-Suche (Client-Galerie)
+│   ├── db.ts                    # SQLite (@libsql/client, ASYNC) + FTS5, Seed aus assets.json
+│   ├── brief.ts                 # buildProductionBrief() (Rollen-Starter-Kit)
+│   └── types.ts                 # Asset-Typen
 ├── data/assets.json             # 2.470 geparste Assets (Seed-Quelle)
-└── scripts/seed.ts, download-images.mjs
+└── scripts/seed.mjs, analyze-images.mjs, download-images.mjs
 
 data/
 ├── assets.db                    # vorgebaute SQLite-DB (committed)
@@ -28,12 +28,19 @@ data/
 
 ## Schlüssel-Design-Entscheidungen
 
-- **Runtime ist Node** → `better-sqlite3` (nicht `bun:sqlite`). `next.config.ts`
-  setzt `serverExternalPackages`.
-- **Named Parameter**: better-sqlite3 erwartet JS-Keys OHNE Sigil → im Code
-  werden **positionale `?`** genutzt (sicher für beide Runtimes).
-- **FTS5**: `assets_fts` Virtual Table über `title, category, publisher`,
-  `bm25()`-Ranking, Präfix-Match (`"token"*`).
+- **DB-Client ist `@libsql/client` und rein Promise-basiert.** JEDER
+  `execute`/`executeMultiple`/`batch`-Aufruf MUSS awaited werden; `getDb()`
+  liefert ein memoiziertes `Promise<Client>` (Schema + Seed abgeschlossen).
+  Historischer Bug: Die Migration von better-sqlite3 auf libsql übernahm die
+  synchrone Aufrufform — dadurch warf jede API-Route zur Laufzeit
+  („Cannot read properties of undefined"). Nie wieder synchron aufrufen.
+- **Positionale `?`-Parameter** über `args: [...]`.
+- **FTS5**: `assets_fts` Virtual Table über `title, category, publisher, analysis`,
+  `bm25()`-Ranking, Präfix-Match (`"token"*`). Die Galerie nutzt DIESE Suche
+  über `/api/assets?q=` (debounced) — keine Client-Zweitsuche mehr.
+- **Kategorie-Filter ist Contains-Match** (`LIKE '%…%'`): brief.ts filtert mit
+  Rollen-Slugs wie `environments`, die realen Kategorien heißen
+  `3d/environments/…` — ein Präfix-Match traf nie.
 - **Bilder**: Ursprungs-URL in DB; lokal gespiegelt in `data/images/<id>.img`;
   Route dient als einheitlicher Endpunkt mit Remote-Fallback.
 - **assets.txt** ist ein Browser-Console-Dump (CRLF, JS-Literal). Parser nutzt

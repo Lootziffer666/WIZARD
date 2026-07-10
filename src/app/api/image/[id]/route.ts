@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:url";
+import { join } from "node:path";
 import type { LibraryAsset } from "@/lib/db";
 
 export const runtime = "nodejs";
-
-function projectRoot(): string {
-  try {
-    return join(process.cwd(), "data", "images");
-  } catch {
-    return join(fileURLToPath(new URL("../../../data/images", import.meta.url)));
-  }
-}
 
 const IMAGES_DIR = process.env.IMAGES_DIR ?? join(process.cwd(), "data", "images");
 
@@ -47,12 +39,12 @@ export async function GET(
   // Fallback: redirect to CDN URL stored in DB
   try {
     const { getDb } = await import("@/lib/db");
-    const db = getDb();
-    const row = db.execute({
+    const db = await getDb();
+    const row = await db.execute({
       sql: "SELECT image FROM assets WHERE id = ?",
       args: [id],
     });
-    const img = row.rows[0] as Pick<LibraryAsset, "image"> | undefined;
+    const img = row.rows[0] as unknown as Pick<LibraryAsset, "image"> | undefined;
     if (img?.image) {
       return NextResponse.redirect(img.image, 307);
     }

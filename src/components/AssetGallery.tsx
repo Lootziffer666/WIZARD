@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Asset, AssetType, Catalog } from "@/lib/types";
-import { searchAssets } from "@/lib/search";
+import { useEffect, useMemo, useState } from "react";
+import type { Asset, AssetType } from "@/lib/types";
 import AssetCard from "./AssetCard";
 
 const TYPES: (AssetType | "")[] = [
@@ -18,25 +17,53 @@ const TYPES: (AssetType | "")[] = [
 ];
 
 export default function AssetGallery({
-  catalog,
   foundIds,
   onPick,
 }: {
-  catalog: Catalog;
   foundIds: Set<string>;
   onPick?: (asset: Asset) => void;
 }) {
   const [q, setQ] = useState("");
   const [type, setType] = useState<AssetType | "">("");
   const [onlyAi, setOnlyAi] = useState(false);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Server-side FTS5/bm25 search (debounced). The gallery used to fetch 3000
+  // assets and re-search them client-side with substring matching — the real
+  // search in the DB was bypassed entirely.
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({ limit: "500" });
+      if (onlyAi && foundIds.size > 0) {
+        params.set("ids", Array.from(foundIds).join(","));
+      } else if (q.trim()) {
+        params.set("q", q.trim());
+      }
+      fetch(`/api/assets?${params}`, { signal: controller.signal })
+        .then((r) => r.json())
+        .then((data) => setAssets(data.assets ?? []))
+        .catch((err) => {
+          if (err?.name !== "AbortError") {
+            console.error("[AssetGallery] search failed:", err);
+            setAssets([]);
+          }
+        })
+        .finally(() => setLoading(false));
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [q, onlyAi, foundIds]);
 
   const results = useMemo(() => {
-    let list = searchAssets(catalog, { query: q, type, limit: 500 });
-    if (onlyAi && foundIds.size > 0) {
-      list = list.filter((a) => foundIds.has(a.id));
-    }
+    let list = assets;
+    if (type) list = list.filter((a) => a.type === type);
+    if (onlyAi && foundIds.size > 0) list = list.filter((a) => foundIds.has(a.id));
     return list;
-  }, [catalog, q, type, onlyAi, foundIds]);
+  }, [assets, type, onlyAi, foundIds]);
 
   return (
     <div className="flex h-full flex-col">
@@ -67,7 +94,7 @@ export default function AssetGallery({
           nur KI-Treffer
         </label>
         <span className="text-xs text-neutral-500">
-          {results.length} / {catalog.length}
+          {loading ? "…" : `${results.length} Treffer`}
         </span>
       </div>
 
@@ -80,7 +107,7 @@ export default function AssetGallery({
             onClick={() => onPick?.(asset)}
           />
         ))}
-        {results.length === 0 && (
+        {results.length === 0 && !loading && (
           <p className="col-span-full py-10 text-center text-sm text-neutral-500">
             Keine Assets gefunden.
           </p>

@@ -1,5 +1,5 @@
 import { createClient, type Client } from "@libsql/client";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Asset, AssetType } from "./types";
 
@@ -20,6 +20,8 @@ export interface SearchParams {
   category?: string;
   platform?: string;
   publisher?: string;
+  /** Explicit id set (e.g. AI-chat hits) — bypasses query/category filters. */
+  ids?: string[];
   limit?: number;
 }
 
@@ -30,22 +32,16 @@ export interface Facets {
   publishers: string[];
 }
 
-// Stable path: always resolve relative to the project root, not cwd
-function projectRoot(): string {
-  // In production (Vercel/Kilo) process.cwd() can be unreliable
-  // Use import.meta.url to get a stable reference
-  try {
-    const { fileURLToPath } = require("node:url");
-    return fileURLToPath(new URL("../", import.meta.url));
-  } catch {
-    return process.cwd();
-  }
-}
+// Next.js runs API routes with cwd = project root; DATABASE_PATH overrides for
+// deployments where that doesn't hold. (The old import.meta.url dance produced
+// a webpack "Can't resolve '../'" warning and resolved into .next/ anyway.)
+const DB_PATH = process.env.DATABASE_PATH ?? join(process.cwd(), "data", "assets.db");
+const SEED_PATH = join(process.cwd(), "src", "data", "assets.json");
 
-const DB_PATH = process.env.DATABASE_PATH ?? join(projectRoot(), "data", "assets.db");
-const SEED_PATH = join(projectRoot(), "src", "data", "assets.json");
-
-const g = globalThis as unknown as { __assetsDb?: Client; __dbReady?: boolean };
+// @libsql/client is Promise-based: every execute()/executeMultiple() must be
+// awaited. getDb() therefore hands out a memoized *Promise* of a ready client
+// (schema ensured, seeded if empty) instead of a bare client.
+const g = globalThis as unknown as { __assetsDbPromise?: Promise<Client> };
 
 function deriveType(category: string): AssetType {
   const c = category.toLowerCase();
@@ -75,8 +71,8 @@ export function toAsset(row: LibraryAsset): Asset {
   };
 }
 
-function ensureSchema(db: Client) {
-  db.executeMultiple(`
+async function ensureSchema(db: Client): Promise<void> {
+  await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS assets (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -103,31 +99,38 @@ function ensureSchema(db: Client) {
   `);
 }
 
-async function seedIfEmpty(db: Client) {
-  const result = db.execute("SELECT COUNT(*) AS c FROM assets");
-  const count = result.rows[0]?.c ?? 0;
+async function seedIfEmpty(db: Client): Promise<void> {
+  const result = await db.execute("SELECT COUNT(*) AS c FROM assets");
+  const count = Number(result.rows[0]?.c ?? 0);
   if (count > 0) return;
   if (!existsSync(SEED_PATH)) {
     throw new Error(`Seed file not found: ${SEED_PATH}`);
   }
   const assets = JSON.parse(readFileSync(SEED_PATH, "utf8")) as LibraryAsset[];
 
-  for (const a of assets) {
-    await db.execute(
-      `INSERT OR REPLACE INTO assets (id, title, category, publisher, platform, url, image, addedAt, analysis)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [a.id, a.title, a.category, a.publisher, a.platform, a.url, a.image, a.addedAt, ""]
-    );
-    await db.execute(
-      `INSERT INTO assets_fts (id, title, category, publisher, analysis) VALUES (?, ?, ?, ?, ?)`,
-      [a.id, a.title, a.category, a.publisher, ""]
+  // Batch the inserts: one statement pair per asset via db.batch keeps the
+  // seed transactional and far faster than 2×2470 sequential round trips.
+  const CHUNK = 200;
+  for (let i = 0; i < assets.length; i += CHUNK) {
+    const chunk = assets.slice(i, i + CHUNK);
+    await db.batch(
+      chunk.flatMap((a) => [
+        {
+          sql: `INSERT OR REPLACE INTO assets (id, title, category, publisher, platform, url, image, addedAt, analysis)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [a.id, a.title, a.category, a.publisher, a.platform, a.url, a.image, a.addedAt, ""],
+        },
+        {
+          sql: `INSERT INTO assets_fts (id, title, category, publisher, analysis) VALUES (?, ?, ?, ?, ?)`,
+          args: [a.id, a.title, a.category, a.publisher, ""],
+        },
+      ]),
+      "write"
     );
   }
 }
 
-export function getDb(): Client {
-  if (g.__assetsDb) return g.__assetsDb;
-
+async function initDb(): Promise<Client> {
   const dbUrl = process.env.DATABASE_URL;
   const db = createClient(
     dbUrl
@@ -137,17 +140,20 @@ export function getDb(): Client {
           url: `file:${DB_PATH}`,
         }
   );
-
-  ensureSchema(db);
-
-  // Seed synchronously on first access for local file mode
-  // (for remote turso urls the seed runs async in the background)
-  if (!dbUrl) {
-    seedIfEmpty(db).catch(console.error);
-  }
-
-  g.__assetsDb = db;
+  await ensureSchema(db);
+  await seedIfEmpty(db);
   return db;
+}
+
+export function getDb(): Promise<Client> {
+  if (!g.__assetsDbPromise) {
+    g.__assetsDbPromise = initDb().catch((err) => {
+      // Do not cache a failed init: allow the next request to retry.
+      g.__assetsDbPromise = undefined;
+      throw err;
+    });
+  }
+  return g.__assetsDbPromise;
 }
 
 function buildMatch(query: string, mode: "and" | "or" = "and"): string {
@@ -161,15 +167,26 @@ function buildMatch(query: string, mode: "and" | "or" = "and"): string {
   return joined;
 }
 
-export function searchLibrary(params: SearchParams = {}): LibraryAsset[] {
-  const db = getDb();
+export async function searchLibrary(params: SearchParams = {}): Promise<LibraryAsset[]> {
+  const db = await getDb();
   const {
     query = "",
     category,
     platform,
     publisher,
+    ids,
     limit = 60,
   } = params;
+
+  if (ids && ids.length > 0) {
+    const placeholders = ids.map(() => "?").join(",");
+    const result = await db.execute({
+      sql: `SELECT * FROM assets WHERE id IN (${placeholders}) LIMIT ?`,
+      args: [...ids, limit],
+    });
+    return result.rows as unknown as LibraryAsset[];
+  }
+
   const match = buildMatch(query, "and");
 
   const clauses: string[] = [];
@@ -181,7 +198,7 @@ export function searchLibrary(params: SearchParams = {}): LibraryAsset[] {
   }
   if (category) {
     clauses.push("a.category LIKE ?");
-    bind.push(`${category}%`);
+    bind.push(`%${category}%`);
   }
   if (platform) {
     clauses.push("a.platform = ?");
@@ -209,58 +226,45 @@ export function searchLibrary(params: SearchParams = {}): LibraryAsset[] {
 
   bind.push(limit);
 
-  const result = db.execute({ sql, args: bind });
+  const result = await db.execute({ sql, args: bind });
   return result.rows as unknown as LibraryAsset[];
 }
 
-export function searchAssets(params: SearchParams = {}): Asset[] {
-  return searchLibrary(params).map(toAsset);
+export async function searchAssets(params: SearchParams = {}): Promise<Asset[]> {
+  return (await searchLibrary(params)).map(toAsset);
 }
 
-export function updateAnalysis(id: string, analysis: string): void {
-  const db = getDb();
-  db.execute({ sql: "UPDATE assets SET analysis = ? WHERE id = ?", args: [analysis, id] });
-  db.execute({ sql: "UPDATE assets_fts SET analysis = ? WHERE id = ?", args: [analysis, id] });
-}
-
-export function getUnanalyzedIds(limit = 1000): string[] {
-  const db = getDb();
-  const result = db.execute({
-    sql: "SELECT id FROM assets WHERE analysis IS NULL OR analysis = '' LIMIT ?",
-    args: [limit],
-  });
-  return result.rows.map((r) => (r as { id: string }).id);
-}
-
-export function countAnalyzed(): { total: number; analyzed: number } {
-  const db = getDb();
-  const total = db.execute("SELECT COUNT(*) c FROM assets");
-  const analyzed = db.execute(
+export async function countAnalyzed(): Promise<{ total: number; analyzed: number }> {
+  const db = await getDb();
+  const total = await db.execute("SELECT COUNT(*) c FROM assets");
+  const analyzed = await db.execute(
     "SELECT COUNT(*) c FROM assets WHERE analysis IS NOT NULL AND analysis != ''"
   );
   return {
-    total: total.rows[0]?.c ?? 0,
-    analyzed: analyzed.rows[0]?.c ?? 0,
+    total: Number(total.rows[0]?.c ?? 0),
+    analyzed: Number(analyzed.rows[0]?.c ?? 0),
   };
 }
 
-export function getFacets(): Facets {
-  const db = getDb();
-  const total = db.execute("SELECT COUNT(*) AS c FROM assets");
-  const platforms = db.execute("SELECT DISTINCT platform FROM assets ORDER BY platform");
-  const categories = db.execute("SELECT DISTINCT category FROM assets ORDER BY category");
-  const publishers = db.execute("SELECT DISTINCT publisher FROM assets ORDER BY publisher");
+export async function getFacets(): Promise<Facets> {
+  const db = await getDb();
+  const total = await db.execute("SELECT COUNT(*) AS c FROM assets");
+  const platforms = await db.execute("SELECT DISTINCT platform FROM assets ORDER BY platform");
+  const categories = await db.execute("SELECT DISTINCT category FROM assets ORDER BY category");
+  const publishers = await db.execute("SELECT DISTINCT publisher FROM assets ORDER BY publisher");
   return {
-    total: total.rows[0]?.c ?? 0,
-    platforms: platforms.rows.map((r) => (r as { platform: string }).platform),
-    categories: categories.rows.map((r) => (r as { category: string }).category),
-    publishers: publishers.rows.map((r) => (r as { publisher: string }).publisher),
+    total: Number(total.rows[0]?.c ?? 0),
+    platforms: platforms.rows.map((r) => String(r.platform)),
+    categories: categories.rows.map((r) => String(r.category)),
+    publishers: publishers.rows.map((r) => String(r.publisher)),
   };
 }
 
-export function getDbStats(): { total: number; dbPath: string; mode: string } {
+export async function getDbStats(): Promise<{ total: number; dbPath: string; mode: string }> {
+  const db = await getDb();
+  const total = await db.execute("SELECT COUNT(*) c FROM assets");
   return {
-    total: (getDb().execute("SELECT COUNT(*) c FROM assets").rows[0]?.c ?? 0) as number,
+    total: Number(total.rows[0]?.c ?? 0),
     dbPath: DB_PATH,
     mode: process.env.DATABASE_URL ? "remote (libsql/turso)" : "local (file)",
   };

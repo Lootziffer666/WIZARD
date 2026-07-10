@@ -14,10 +14,15 @@ erzeugt und Assets nach Stil/Genre/Atmosphäre (visuelle Grammatik) castet.
 - [x] AssetPilot GUI: Galerie (Suche/Filter) + Claude-Chat-Panel
 - [x] `search_assets` Tool (serverseitig) via Anthropic SDK
 - [x] API-Route `/api/chat` mit Tool-Loop, apiKey aus Settings oder Env
-- [x] ImportModal (JSON-Upload/Paste) + SettingsModal (API-Key/Modell)
-- [x] Beispiel-Katalog mit 16 Assets (src/lib/sampleCatalog.ts)
+- [x] SettingsModal (API-Key/Modell); ImportModal + sampleCatalog entfernt (toter Code)
 - [x] **Echte Asset-Datenbank aus assets.txt**: 2470 Assets (Unity + Fab) geparst
-      und in SQLite (better-sqlite3) mit FTS5-Volltextsuche geladen
+      und in SQLite (@libsql/client) mit FTS5-Volltextsuche geladen
+- [x] **2026-07-10 Sanierung**: db.ts vollständig async (libsql ist Promise-basiert —
+      die libsql-Migration hatte JEDE API-Route zur Laufzeit gebrochen), Galerie auf
+      Server-FTS umgestellt (`/api/assets?q=`, debounced, `ids`-Param für KI-Treffer),
+      Image-Route-Importe + fehlendes await gefixt, brief.ts-Kategorie-Match
+      Präfix→Contains (Rollen waren immer leer), seed.mjs/analyze-images.mjs auf
+      libsql portiert, scripts/seed.ts gelöscht
 - [x] `src/lib/db.ts`: SQLite/FTS5-Modul, `searchAssets`/`searchLibrary`/`getFacets`
 - [x] `src/app/api/assets/route.ts`: GET-Endpoint (q/category/platform/publisher/limit, action=facets)
 - [x] Chat-Route auf DB-Suche umgestellt (Tool-Schema an echte Felder angepasst,
@@ -37,12 +42,13 @@ erzeugt und Assets nach Stil/Genre/Atmosphäre (visuelle Grammatik) castet.
 | `src/app/page.tsx` | Haupt-GUI (Galerie + Chat) – lädt Katalog via `/api/assets` |
 | `src/app/api/chat/route.ts` | Claude-Proxy mit DB-`search_assets` Tool-Loop |
 | `src/app/api/assets/route.ts` | Asset-Suche/Facets API (FTS5) |
-| `src/lib/db.ts` | SQLite (better-sqlite3) + FTS5, Seed aus `src/data/assets.json` |
-| `src/lib/types.ts` | Asset/Catalog-Typen |
-| `src/lib/search.ts` | Token-Suche (Client-Galerie, weiter genutzt) |
+| `src/lib/db.ts` | SQLite (@libsql/client, async) + FTS5, Seed aus `src/data/assets.json` |
+| `src/lib/brief.ts` | buildProductionBrief() (Rollen-Starter-Kit + Missing-Assets) |
+| `src/lib/types.ts` | Asset-Typen |
 | `src/data/assets.json` | Geparste 2470 Assets (Quelle für Seed) |
 | `data/assets.db` | Vorgebaute SQLite-DB (committed) |
-| `scripts/seed.ts` | DB-Seed-Skript |
+| `scripts/seed.mjs` | DB-Seed-Skript (libsql) |
+| `scripts/analyze-images.mjs` | Style-Tag-Anreicherung (heuristisch oder --vision) |
 | `src/components/AssetGallery.tsx` | Galerie + Filter |
 | `src/components/ChatPanel.tsx` | Chat mit Claude |
 | `src/components/SettingsModal.tsx` | API-Key/Modell |
@@ -79,11 +85,10 @@ Unreal in a Box. Diese sind Teil der Vision, aber eigene Baustellen.
 
 ## Wichtige Hinweise
 
-- **Runtime ist Node** (nicht Bun): `bun:sqlite` funktioniert NICHT; es wird
-  `better-sqlite3` verwendet. `next.config.ts` setzt `serverExternalPackages`.
-- Named-Parameter in better-sqlite3: JS-Objekt-Keys OHNE Sigil (`{id: ...}`),
-  nicht `{ $id: ... }`. Im Code werden daher **positionale `?`** genutzt (sicher
-  für beide Runtimes).
+- **DB-Client ist `@libsql/client` und rein ASYNC** — jeder execute/batch-Aufruf
+  muss awaited werden; `getDb()` liefert `Promise<Client>`. Die frühere
+  better-sqlite3-Doku ist obsolet; ein synchroner Aufrufstil bricht ALLE Routen.
+- Positionale `?`-Parameter über `args: [...]`.
 - `assets.txt` ist ein Browser-Console-Dump (CRLF, JS-Literal-Format). Parser in
   `/tmp/kilo/parse.mjs` (CRLF-Strip + Feld-Block-Regex).
 - Build braucht `NEXT_TURBOPACK_EXPERIMENTAL_USE_SYSTEM_TLS_CERTS=1` (Google Fonts).

@@ -75,7 +75,7 @@ The chat responds in German and automatically translates search terms to English
 
 ### 3. Asset Gallery
 
-- Fast client-side full-text search across the loaded catalog
+- Server-side FTS5/bm25 full-text search (debounced; the gallery queries `/api/assets?q=` instead of loading the whole catalog into the browser)
 - Filter by asset type (StaticMesh, SkeletalMesh, Material, Texture, Blueprint, Animation, Sound, Particle)
 - Highlight mode: show only assets found by the AI chat
 - Clicking an asset opens a modal with all details, tags, and store link
@@ -202,17 +202,14 @@ WIZARD/
 │ │ │ ├── health/route.ts # GET /api/health (DB Status)
 │ │ │ └── image/[id]/ # GET /api/image/:id (Thumbnail Proxy)
 │ ├── components/
-│ │ ├── AssetGallery.tsx # Search Gallery + Filter
+│ │ ├── AssetGallery.tsx # Search Gallery + Filter (server-side FTS via /api/assets)
 │ │ ├── AssetCard.tsx # Individual Asset Card
 │ │ ├── ChatPanel.tsx # AI Chat Interface
-│ │ ├── ImportModal.tsx # (Present, possibly for import use)
 │ │ └── SettingsModal.tsx # API Key Settings
 │ ├── lib/
-│ │ ├── db.ts # LibSQL Client + All DB Operations
+│ │ ├── db.ts # LibSQL Client (async!) + All DB Operations
 │ │ ├── brief.ts # buildProductionBrief() for Starter Kits
-│ │ ├── search.ts # Client-Side Search Helpers
-│ │ ├── types.ts # TypeScript Types
-│ │ └── sampleCatalog.ts # Fallback Catalog (German, unused)
+│ │ └── types.ts # TypeScript Types
 │ └── data/
 │ └── assets.json # Seed File (2,470 Assets, 1.1 MB)
 ├── data/

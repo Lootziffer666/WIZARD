@@ -5,8 +5,8 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const stats = getDbStats();
-    const { total, analyzed } = countAnalyzed();
+    const stats = await getDbStats();
+    const { total, analyzed } = await countAnalyzed();
     return NextResponse.json({
       status: "ok",
       ...stats,

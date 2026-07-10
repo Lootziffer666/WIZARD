@@ -9,18 +9,20 @@ export async function GET(req: NextRequest) {
     const action = searchParams.get("action");
 
     if (action === "facets") {
-      return NextResponse.json(getFacets());
+      return NextResponse.json(await getFacets());
     }
 
     if (action === "stats") {
-      return NextResponse.json(getDbStats());
+      return NextResponse.json(await getDbStats());
     }
 
-    const assets = searchAssets({
+    const idsParam = searchParams.get("ids");
+    const assets = await searchAssets({
       query: searchParams.get("q") ?? undefined,
       category: searchParams.get("category") ?? undefined,
       platform: searchParams.get("platform") ?? undefined,
       publisher: searchParams.get("publisher") ?? undefined,
+      ids: idsParam ? idsParam.split(",").filter(Boolean) : undefined,
       limit: Number(searchParams.get("limit") ?? 200),
     });
 
