@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 # asset preview images are committed to data/images (small, ~14MB total)
+
+# SQLite runtime artifacts
+data/assets.db-shm
+data/assets.db-wal
+src/data/assets.db
