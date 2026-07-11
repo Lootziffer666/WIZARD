@@ -8,7 +8,7 @@ interface ChatMsg {
 }
 
 interface Settings {
-  provider?: "anthropic" | "openai";
+  provider?: "anthropic" | "openai" | "bellows";
   apiKey: string;
   model: string;
 }
