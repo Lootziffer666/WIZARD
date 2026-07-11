@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDbStats, countAnalyzed } from "@/lib/db";
+import { PRODUCTION_ASSESSMENT_CONTRACT_ID } from "@/lib/contracts/productionAssessment";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,8 @@ export async function GET() {
       status: "ok",
       ...stats,
       assets: { total, analyzed },
+      capabilities: { productionAssessment: true },
+      contracts: [PRODUCTION_ASSESSMENT_CONTRACT_ID],
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
