@@ -54,6 +54,12 @@ const CONCEPTS: Record<string, string[]> = {
   musik: ["music", "soundtrack", "ambient", "theme"],
   charakter: ["character", "creature", "npc", "hero"],
   held: ["hero", "character", "knight", "warrior"],
+  fotogrammetrie: ["photogrammetry", "scan", "megascans", "realistic"],
+  photogrammetry: ["scan", "megascans", "realistic"],
+  megascans: ["quixel", "photogrammetry", "scan", "surface"],
+  realistisch: ["realistic", "photogrammetry", "scanned", "pbr"],
+  mensch: ["human", "character", "metahuman", "person"],
+  human: ["character", "metahuman", "person"],
 };
 
 /** Query um Konzept-Vokabeln erweitern (behält Original-Tokens). */
@@ -109,15 +115,17 @@ export async function semanticSearch(params: {
   query: string;
   category?: string;
   platform?: string;
+  publisher?: string;
   limit?: number;
 }): Promise<SemanticHit[]> {
-  const { query, category, platform, limit = 20 } = params;
+  const { query, category, platform, publisher, limit = 20 } = params;
   const expanded = expandQuery(query);
 
   const candidates = await searchLibrary({
     query: expanded,
     category,
     platform,
+    publisher,
     matchMode: "or",
     limit: Math.max(limit * 10, 120),
   });

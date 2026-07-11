@@ -4,6 +4,12 @@ import { buildCapabilityCast, type CapabilityCastResult } from "./capabilities";
 import { semanticSearch } from "./semantic";
 import { memoryBoosts, type MemoryBoost } from "./memory";
 import { deriveProvenance, type ProvenanceSource } from "./provenance";
+import {
+  buildSurfacePass,
+  deriveCharacterPipeline,
+  type SurfacePassResult,
+  type CharacterPipelineResult,
+} from "./epicPipeline";
 
 export interface BriefResult {
   brief: string;
@@ -15,6 +21,10 @@ export interface BriefResult {
   shadedPass: ShadedPassResult;
   /** Feature Casting (assetpilot.md): benötigte Fähigkeiten + gecastete Systeme. */
   capabilityCast: CapabilityCastResult;
+  /** Megascans-Oberflächen passend zu den SHADED-Weltzuständen (Fotogrammetrie-Basis). */
+  surfacePass: SurfacePassResult;
+  /** Empfohlener Charakter-Weg: MetaHuman→SWIFT oder SWIFT-prozedural. */
+  characterPipeline: CharacterPipelineResult;
 }
 
 export interface BriefAsset {
@@ -93,13 +103,17 @@ export async function buildProductionBrief(
     if (summarized.length < 2) missingAssets.push(r.role);
   }
 
+  const shadedPass = deriveShadedPass(brief);
+
   return {
     brief,
     broad,
     starterKit,
     missingAssets,
     totalFound: Object.values(starterKit).reduce((n, a) => n + a.length, 0),
-    shadedPass: deriveShadedPass(brief),
+    shadedPass,
     capabilityCast: await buildCapabilityCast(brief),
+    surfacePass: await buildSurfacePass(shadedPass),
+    characterPipeline: deriveCharacterPipeline(brief),
   };
 }
