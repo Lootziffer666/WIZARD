@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { searchLibrary } from "@/lib/db";
 import { buildProductionBrief } from "@/lib/brief";
+import { semanticSearch } from "@/lib/semantic";
+import { recordMemory, listMemory, type MemoryVerdict } from "@/lib/memory";
+import { deriveProvenance } from "@/lib/provenance";
 
 export const runtime = "nodejs";
 
@@ -24,8 +27,11 @@ Jedes Asset hat: title (Name), category (z.B. "3d/props/weapons", "2d/textures-m
 WICHTIG: Die Katalog-Einträge sind auf ENGLISCH. Wenn der Nutzer auf Deutsch fragt, übersetze die Suchbegriffe in passende englische Keywords, bevor du suchst.
 Die Previews wurden ausgewertet: du kannst auch nach STIL/ATMOSPHÄRE suchen (z.B. desert, dusty, medieval, neon, horror, cute, sci-fi, fantasy, nature, urban, cartoon).
 Du siehst NICHT alle Assets auf einmal.
-- Nutze IMMER "search_assets" für Einzelanfragen (Name, Kategorie, Stil/Atmosphäre, Publisher, Plattform).
+- Nutze IMMER "search_assets" für Einzelanfragen (Name, Kategorie, Stil/Atmosphäre, Publisher, Plattform). Bei Stil-/Atmosphäre-Anfragen setze semantic=true (Konzept-Expansion de→en + Ähnlichkeits-Ranking).
 - Wenn der Nutzer eine SPIELIDEE beschreibt, nutze "build_production_brief", um einen kuratierten Starter-Kit (Assets nach Rolle) plus eine Missing-Asset-Liste zu erzeugen.
+- Wenn der Nutzer berichtet, dass ein Asset in einem Kontext gut oder schlecht funktioniert hat, speichere das mit "record_production_memory" (Produktionsgedächtnis). Bewährte Assets werden in künftigen Briefs bevorzugt, problematische markiert.
+- Jedes Asset hat eine Quellen-Provenienz (unity-store, fab, megascans, metahuman, uefn, custom …) mit Nutzungshinweis — erwähne sie, wenn es für die Produktionsentscheidung zählt (z. B. UEFN-Ziel).
+- Der Production-Brief enthält zusätzlich surfacePass (Quixel-Megascans-Oberflächen passend zu den SHADED-Weltzuständen — die Fotogrammetrie-Basis, über die SHADED Staub/Alterung legt) und characterPipeline (empfohlener Charakter-Weg: MetaHuman→UE-FBX→SWIFT-Sprites für realistische Menschen, sonst SWIFT-prozedural). Nenne beide, wenn sie zur Idee passen.
 Wenn du Assets nennst, gib den genauen Titel und die url an, damit der Nutzer sie findet.
 Sei kurz, ermutigend und konkret. Denke in Starter-Kits, Missionen und kindgerechten Spielmomenten. Antworte in der Sprache des Nutzers (meist Deutsch).
 Schlage bei offenen Fragen passende Assets aus der Datenbank vor, statt zu raten.`;
@@ -61,14 +67,41 @@ const ANTHROPIC_TOOLS: Anthropic.Tool[] = [
           type: "number",
           description: "Maximale Anzahl Ergebnisse (Standard 20).",
         },
+        semantic: {
+          type: "boolean",
+          description:
+            "true bei Stil-/Atmosphäre-/Konzept-Suchen: expandiert deutsche Konzepte auf englische Katalog-Vokabeln und rankt nach Ähnlichkeit statt exaktem Wortlaut.",
+        },
       },
       required: [],
     },
   },
   {
+    name: "record_production_memory",
+    description:
+      "Produktionsgedächtnis: speichert, dass sich ein Asset in einem Kontext BEWÄHRT hat oder PROBLEMATISCH war (z. B. 'desert_archway_04 passt super zu staubiger Stadt mit heat_haze-Shader'). Bewährte Assets werden in künftigen Production-Briefs im passenden Kontext bevorzugt, problematische markiert. Nutze das immer, wenn der Nutzer Feedback zu einem konkreten Asset gibt.",
+    input_schema: {
+      type: "object",
+      properties: {
+        assetId: { type: "string", description: "Die Asset-ID (aus search_assets/build_production_brief)." },
+        context: {
+          type: "string",
+          description: "Kontext-Stichwörter, in denen die Erfahrung gilt, z. B. 'staubige stadt wüste niedrige architektur'.",
+        },
+        verdict: { type: "string", enum: ["bewährt", "problematisch"], description: "Hat es funktioniert?" },
+        combo: {
+          type: "object",
+          description: "Optional: bewährte Kombination, z. B. {\"shader\": \"heat_haze\", \"lighting\": \"golden_low\"}.",
+        },
+        note: { type: "string", description: "Optional: kurze Begründung." },
+      },
+      required: ["assetId", "context", "verdict"],
+    },
+  },
+  {
     name: "build_production_brief",
     description:
-      "Erzeugt aus einer Spielidee einen kuratierten Starter-Kit (Assets nach Rolle: Environment, Characters, Props, Materials, Audio, VFX, UI) sowie eine Missing-Asset-Liste der Rollen, die kaum abgedeckt sind. Nutze das bei Spielideen, nicht für Einzelanfragen.",
+      "Erzeugt aus einer Spielidee einen kuratierten Starter-Kit (Assets nach Rolle: Environment, Characters, Props, Materials, Audio, VFX, UI), eine Missing-Asset-Liste der Rollen, die kaum abgedeckt sind, sowie einen SHADED-Pass-Vorschlag (shadedPass: SHADED-Weltparameter wie fog/wet/decay + SWIFT-Weltzustands-Varianten wie dust/aging/heat, inkl. Beispiel-Renderkommando). Erwähne den shadedPass in deiner Antwort, wenn er Parameter enthält — das ist der Weltkleber-Schritt, der zusammengewürfelte Assets zu EINEM Ort macht. Nutze das Tool bei Spielideen, nicht für Einzelanfragen.",
     input_schema: {
       type: "object",
       properties: {
@@ -107,20 +140,54 @@ async function runWizardTool(name: string, input: unknown): Promise<ToolResult> 
     return { content: JSON.stringify(result), ids };
   }
 
+  if (name === "record_production_memory") {
+    const args = input as {
+      assetId?: string;
+      context?: string;
+      verdict?: MemoryVerdict;
+      combo?: Record<string, string>;
+      note?: string;
+    };
+    if (!args.assetId || !args.context || !args.verdict) {
+      return { content: JSON.stringify({ error: "assetId, context und verdict sind Pflicht." }), ids: [] };
+    }
+    const record = await recordMemory({
+      assetId: args.assetId,
+      context: args.context,
+      verdict: args.verdict,
+      combo: args.combo,
+      note: args.note,
+    });
+    const history = await listMemory(args.assetId);
+    return {
+      content: JSON.stringify({ saved: record, entriesForAsset: history.length }),
+      ids: [args.assetId],
+    };
+  }
+
   const args = (input ?? {}) as {
     query?: string;
     category?: string;
     platform?: string;
     publisher?: string;
     limit?: number;
+    semantic?: boolean;
   };
-  const results = await searchLibrary({
-    query: args.query ?? "",
-    category: args.category,
-    platform: args.platform,
-    publisher: args.publisher,
-    limit: args.limit ?? 20,
-  });
+  const results =
+    args.semantic && args.query
+      ? await semanticSearch({
+          query: args.query,
+          category: args.category,
+          platform: args.platform,
+          limit: args.limit ?? 20,
+        })
+      : await searchLibrary({
+          query: args.query ?? "",
+          category: args.category,
+          platform: args.platform,
+          publisher: args.publisher,
+          limit: args.limit ?? 20,
+        });
 
   return {
     ids: results.map((r) => r.id),
@@ -132,6 +199,8 @@ async function runWizardTool(name: string, input: unknown): Promise<ToolResult> 
         platform: r.platform,
         publisher: r.publisher,
         url: r.url,
+        source: deriveProvenance(r).source,
+        ...("similarity" in r ? { similarity: r.similarity } : {}),
       }))
     ),
   };

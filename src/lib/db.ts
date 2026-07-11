@@ -21,6 +21,8 @@ export interface SearchParams {
   platform?: string;
   publisher?: string;
   limit?: number;
+  /** "or": mindestens ein Suchwort muss treffen (Capability-/Semantik-Suche). Default "and". */
+  matchMode?: "and" | "or";
 }
 
 export interface Facets {
@@ -162,8 +164,9 @@ export async function searchLibrary(params: SearchParams = {}): Promise<LibraryA
     platform,
     publisher,
     limit = 60,
+    matchMode = "and",
   } = params;
-  const match = buildMatch(query, "and");
+  const match = buildMatch(query, matchMode);
 
   const clauses: string[] = [];
   const bind: (string | number)[] = [];
