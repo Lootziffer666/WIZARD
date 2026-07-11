@@ -1,4 +1,5 @@
 import { searchLibrary, type LibraryAsset } from "./db";
+import { deriveShadedPass, type ShadedPassResult } from "./shadedPass";
 
 export interface BriefResult {
   brief: string;
@@ -6,6 +7,8 @@ export interface BriefResult {
   starterKit: Record<string, BriefAsset[]>;
   missingAssets: string[];
   totalFound: number;
+  /** Weltkleber-Schritt (assetpilot.md): SHADED-Parameter + SWIFT-Weltzustände. */
+  shadedPass: ShadedPassResult;
 }
 
 export interface BriefAsset {
@@ -66,5 +69,6 @@ export async function buildProductionBrief(
     starterKit,
     missingAssets,
     totalFound: Object.values(starterKit).reduce((n, a) => n + a.length, 0),
+    shadedPass: deriveShadedPass(brief),
   };
 }

@@ -68,7 +68,7 @@ const ANTHROPIC_TOOLS: Anthropic.Tool[] = [
   {
     name: "build_production_brief",
     description:
-      "Erzeugt aus einer Spielidee einen kuratierten Starter-Kit (Assets nach Rolle: Environment, Characters, Props, Materials, Audio, VFX, UI) sowie eine Missing-Asset-Liste der Rollen, die kaum abgedeckt sind. Nutze das bei Spielideen, nicht für Einzelanfragen.",
+      "Erzeugt aus einer Spielidee einen kuratierten Starter-Kit (Assets nach Rolle: Environment, Characters, Props, Materials, Audio, VFX, UI), eine Missing-Asset-Liste der Rollen, die kaum abgedeckt sind, sowie einen SHADED-Pass-Vorschlag (shadedPass: SHADED-Weltparameter wie fog/wet/decay + SWIFT-Weltzustands-Varianten wie dust/aging/heat, inkl. Beispiel-Renderkommando). Erwähne den shadedPass in deiner Antwort, wenn er Parameter enthält — das ist der Weltkleber-Schritt, der zusammengewürfelte Assets zu EINEM Ort macht. Nutze das Tool bei Spielideen, nicht für Einzelanfragen.",
     input_schema: {
       type: "object",
       properties: {
