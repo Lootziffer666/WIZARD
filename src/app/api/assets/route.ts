@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFacets, searchAssets, getDbStats } from "@/lib/db";
+import { getFacets, searchAssets, getDbStats, toAsset } from "@/lib/db";
+import { semanticSearch } from "@/lib/semantic";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,17 @@ export async function GET(req: NextRequest) {
 
     if (action === "stats") {
       return NextResponse.json(await getDbStats());
+    }
+
+    // ?semantic=1: Konzept-Expansion (de→en) + Trigramm-Reranking statt Roh-FTS
+    if (searchParams.get("semantic") && searchParams.get("q")) {
+      const hits = await semanticSearch({
+        query: searchParams.get("q") ?? "",
+        category: searchParams.get("category") ?? undefined,
+        platform: searchParams.get("platform") ?? undefined,
+        limit: Number(searchParams.get("limit") ?? 60),
+      });
+      return NextResponse.json({ total: hits.length, assets: hits.map(toAsset) });
     }
 
     const assets = await searchAssets({
