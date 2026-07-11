@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AssetPilot – KI-Asset-Suche",
-  description: "Gui fuer KI-Zugriff auf Unreal-Assets",
+  title: "WIZARD – Spielideen-Zauberer",
+  description: "KI-Assistent, der Spielideen in passende Asset-Starter-Kits verwandelt",
 };
 
 export default function RootLayout({
@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="de">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

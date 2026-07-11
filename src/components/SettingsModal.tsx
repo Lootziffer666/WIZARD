@@ -2,15 +2,32 @@
 
 import { useState } from "react";
 
+export type AiProvider = "anthropic" | "openai";
+
 export interface Settings {
+  provider: AiProvider;
   apiKey: string;
   model: string;
 }
 
-const MODELS = [
-  "claude-sonnet-4-6",
-  "claude-opus-4-7",
-  "claude-haiku-4-5",
+const MODELS: Record<AiProvider, string[]> = {
+  anthropic: ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"],
+  openai: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini"],
+};
+
+const PROVIDERS: { id: AiProvider; label: string; env: string; placeholder: string }[] = [
+  {
+    id: "anthropic",
+    label: "Anthropic Claude",
+    env: "ANTHROPIC_API_KEY",
+    placeholder: "sk-ant-…",
+  },
+  {
+    id: "openai",
+    label: "OpenAI GPT",
+    env: "OPENAI_API_KEY",
+    placeholder: "sk-proj-…",
+  },
 ];
 
 export default function SettingsModal({
@@ -22,8 +39,19 @@ export default function SettingsModal({
   onChange: (s: Settings) => void;
   onClose: () => void;
 }) {
+  const [provider, setProvider] = useState<AiProvider>(settings.provider ?? "anthropic");
   const [key, setKey] = useState(settings.apiKey);
   const [model, setModel] = useState(settings.model);
+
+  const activeProvider = PROVIDERS.find((p) => p.id === provider) ?? PROVIDERS[0];
+  const providerModels = MODELS[provider];
+
+  function changeProvider(nextProvider: AiProvider) {
+    setProvider(nextProvider);
+    if (!MODELS[nextProvider].includes(model)) {
+      setModel(MODELS[nextProvider][0]);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -32,14 +60,27 @@ export default function SettingsModal({
           ⚙️ Einstellungen
         </h2>
 
+        <label className="mb-1 block text-xs text-neutral-400">KI-Anbieter</label>
+        <select
+          value={provider}
+          onChange={(e) => changeProvider(e.target.value as AiProvider)}
+          className="mb-4 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+        >
+          {PROVIDERS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+
         <label className="mb-1 block text-xs text-neutral-400">
-          Claude API-Key
+          {activeProvider.label} API-Key
         </label>
         <input
           type="password"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          placeholder="sk-ant-…"
+          placeholder={activeProvider.placeholder}
           className="mb-4 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-emerald-500"
         />
 
@@ -49,7 +90,7 @@ export default function SettingsModal({
           onChange={(e) => setModel(e.target.value)}
           className="mb-4 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
         >
-          {MODELS.map((m) => (
+          {providerModels.map((m) => (
             <option key={m} value={m}>
               {m}
             </option>
@@ -57,9 +98,9 @@ export default function SettingsModal({
         </select>
 
         <p className="mb-4 text-xs text-neutral-500">
-          Der Key wird nur an Anthropic gesendet, nicht gespeichert. Alternativ
-          kannst du <code>ANTHROPIC_API_KEY</code> als Server-Umgebungsvariable
-          setzen.
+          Der Key wird nur an den gewählten Anbieter gesendet und nur lokal im
+          Browser gespeichert. Für Docker/Server kannst du alternativ{" "}
+          <code>{activeProvider.env}</code> setzen.
         </p>
 
         <div className="flex justify-end gap-2">
@@ -71,7 +112,7 @@ export default function SettingsModal({
           </button>
           <button
             onClick={() => {
-              onChange({ apiKey: key, model });
+              onChange({ provider, apiKey: key, model });
               onClose();
             }}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white"

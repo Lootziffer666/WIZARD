@@ -8,15 +8,16 @@ interface ChatMsg {
 }
 
 interface Settings {
+  provider?: "anthropic" | "openai";
   apiKey: string;
   model: string;
 }
 
 const SUGGESTIONS = [
-  "Finde mir holzige Türen.",
-  "Zeig mir Assets unter 1000 Polygonen.",
+  "Baue ein Starter-Kit für ein Vater-Sohn-Koop-Abenteuer im Wald.",
+  "Welche Assets passen zu einer magischen Werkstatt mit Robotern?",
   "Mach ein Koop-Spiel in einer staubigen Wüstenstadt mit improvisierter Technik.",
-  "Ich brauche eine Fackel mit Feuer.",
+  "Ich brauche Lagerfeuer, Türen, Gegner und eine einfache Mission.",
 ];
 
 export default function ChatPanel({
@@ -54,6 +55,7 @@ export default function ChatPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: next,
+          provider: settings.provider || "anthropic",
           apiKey: settings.apiKey || undefined,
           model: settings.model || undefined,
         }),
@@ -78,17 +80,17 @@ export default function ChatPanel({
     <div className="flex h-full flex-col">
       <div className="border-b border-neutral-800 p-3">
         <h2 className="text-sm font-semibold text-neutral-200">
-          💬 KI-Assistent
+          🧙 WIZARD-Chat
         </h2>
         <p className="text-xs text-neutral-500">
-          Frag einfach – die KI findet die passenden Assets.
+          Schreibt eine Spielidee – WIZARD castet passende Assets und fehlende Teile.
         </p>
       </div>
 
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3">
         {messages.length === 0 && (
           <div className="space-y-2">
-            <p className="text-xs text-neutral-500">Versuch eine Frage:</p>
+            <p className="text-xs text-neutral-500">Start-Ideen:</p>
             {SUGGESTIONS.map((s) => (
               <button
                 key={s}
@@ -121,7 +123,7 @@ export default function ChatPanel({
         {sending && (
           <div className="flex justify-start">
             <div className="rounded-2xl bg-neutral-800 px-3 py-2 text-sm text-neutral-400">
-              …sucht im Katalog
+              …zaubert im Asset-Katalog
             </div>
           </div>
         )}
@@ -142,7 +144,7 @@ export default function ChatPanel({
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Frag nach Assets…"
+          placeholder="Beschreib eure Spielidee oder ein gesuchtes Asset…"
           className="flex-1 rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-emerald-500"
         />
         <button
