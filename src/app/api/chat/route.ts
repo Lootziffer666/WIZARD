@@ -7,7 +7,7 @@ import { deriveProvenance } from "@/lib/provenance";
 
 export const runtime = "nodejs";
 
-type AiProvider = "anthropic" | "openai";
+type AiProvider = "anthropic" | "openai" | "bellows";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -127,6 +127,18 @@ const OPENAI_TOOLS = ANTHROPIC_TOOLS.map((tool) => ({
   parameters: tool.input_schema,
 }));
 
+// Chat-Completions-Function-Calling-Schema (verschachtelt unter `function`) - das ist,
+// was Bellows/OpenAI-kompatible Gateways unter POST /v1/chat/completions erwarten.
+// Anders als OPENAI_TOOLS oben (flaches Schema der neueren Responses API).
+const CHAT_COMPLETIONS_TOOLS = ANTHROPIC_TOOLS.map((tool) => ({
+  type: "function" as const,
+  function: {
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.input_schema,
+  },
+}));
+
 interface ToolResult {
   content: string;
   ids: string[];
@@ -215,11 +227,22 @@ function extractAnthropicText(content: Anthropic.ContentBlock[]): string {
 
 function providerKey(provider: AiProvider, requestKey?: string): string | undefined {
   if (requestKey) return requestKey;
+  if (provider === "bellows") return process.env.WIZARD_LLM_API_KEY;
   return provider === "openai" ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY;
 }
 
 function defaultModel(provider: AiProvider): string {
+  if (provider === "bellows") return process.env.WIZARD_LLM_MODEL || "gpt-5.4-mini";
   return provider === "openai" ? "gpt-5.4-mini" : "claude-sonnet-4-6";
+}
+
+/**
+ * Bellows ist der Standardweg, sobald der Server dafür konfiguriert ist (wie bei
+ * CUE-AGENT: CUE_LLM_BASE_URL gesetzt ⇒ Bellows statt direktem Anthropic/OpenAI-Call).
+ * Ohne WIZARD_LLM_BASE_URL bleibt Anthropic der Fallback-Default (Rückwärtskompatibilität).
+ */
+function defaultProvider(): AiProvider {
+  return process.env.WIZARD_LLM_BASE_URL ? "bellows" : "anthropic";
 }
 
 async function runAnthropic(body: ChatRequest, apiKey: string) {
@@ -262,6 +285,102 @@ async function runAnthropic(body: ChatRequest, apiKey: string) {
     }
 
     reply = extractAnthropicText(message.content);
+    break;
+  }
+
+  return { reply, foundIds: Array.from(foundIds) };
+}
+
+// ── Anvil-Bellows (OpenAI-kompatibler Chat-Completions-Gateway) ────────────────
+// Wie CUE-AGENT (src/llm/providers/openai.js, CUE_LLM_BASE_URL/CUE_LLM_API_KEY/
+// CUE_LLM_MODEL) und wie jedes andere Ökosystem-Tool außer ElevenLabs (TTS, kein
+// LLM): WIZARD sollte für Chat-Vervollständigungen den gemeinsamen Bellows-Gateway
+// nutzen statt Provider-Keys direkt vom Client entgegenzunehmen. Bearer-Token ist
+// optional, weil der Gateway selbst offen (kein gatewayKey konfiguriert) laufen darf.
+
+interface BellowsToolCall {
+  id: string;
+  type?: string;
+  function?: { name?: string; arguments?: string };
+}
+
+interface BellowsMessage {
+  role: string;
+  content?: string | null;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: BellowsToolCall[];
+}
+
+interface BellowsChatResponse {
+  choices?: { message?: BellowsMessage; finish_reason?: string }[];
+  error?: { message?: string };
+}
+
+function bellowsChatCompletionsUrl(baseUrl: string): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  return base.endsWith("/v1") ? `${base}/chat/completions` : `${base}/v1/chat/completions`;
+}
+
+async function postBellowsChatCompletions(
+  baseUrl: string,
+  apiKey: string | undefined,
+  body: Record<string, unknown>
+): Promise<BellowsChatResponse> {
+  let res: Response;
+  try {
+    res = await fetch(bellowsChatCompletionsUrl(baseUrl), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw new Error(
+      `Bellows-Gateway nicht erreichbar (${bellowsChatCompletionsUrl(baseUrl)}): ${
+        err instanceof Error ? err.message : String(err)
+      }. Läuft der Gateway und ist WIZARD_LLM_BASE_URL korrekt?`
+    );
+  }
+  const data = (await res.json()) as BellowsChatResponse;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? `Bellows-Gateway-Fehler (${res.status})`);
+  }
+  return data;
+}
+
+async function runBellows(body: ChatRequest, apiKey: string | undefined, baseUrl: string, model: string) {
+  const foundIds = new Set<string>();
+  const conv: BellowsMessage[] = [
+    { role: "system", content: SYSTEM },
+    ...body.messages.map((m) => ({ role: m.role, content: m.content })),
+  ];
+
+  let reply = "";
+  for (let turn = 0; turn < 6; turn++) {
+    const data = await postBellowsChatCompletions(baseUrl, apiKey, {
+      model,
+      messages: conv,
+      tools: CHAT_COMPLETIONS_TOOLS,
+    });
+    const choice = data.choices?.[0];
+    const message = choice?.message;
+    const toolCalls = message?.tool_calls ?? [];
+
+    if (toolCalls.length > 0) {
+      conv.push({ role: "assistant", content: message?.content ?? null, tool_calls: toolCalls });
+      for (const tc of toolCalls) {
+        const args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+        const result = await runWizardTool(tc.function?.name ?? "", args);
+        result.ids.forEach((id) => foundIds.add(id));
+        conv.push({ role: "tool", tool_call_id: tc.id, content: result.content });
+      }
+      continue;
+    }
+
+    reply = message?.content ?? "";
     break;
   }
 
@@ -361,7 +480,28 @@ export async function POST(req: Request) {
     return Response.json({ error: "Ungültige Anfrage." }, { status: 400 });
   }
 
-  const provider = body.provider ?? "anthropic";
+  const provider = body.provider ?? defaultProvider();
+
+  if (provider === "bellows") {
+    const baseUrl = process.env.WIZARD_LLM_BASE_URL;
+    if (!baseUrl) {
+      return Response.json(
+        { error: "Kein Bellows-Gateway konfiguriert. Setze WIZARD_LLM_BASE_URL auf dem Server." },
+        { status: 400 }
+      );
+    }
+    // Bearer-Token ist beim Bellows-Gateway optional (offener Gateway ohne
+    // gatewayKey ist ein gültiger Betriebsmodus) - anders als Anthropic/OpenAI direkt.
+    const apiKey = providerKey(provider, body.apiKey);
+    try {
+      const result = await runBellows(body, apiKey, baseUrl, body.model || defaultModel("bellows"));
+      return Response.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unbekannter Fehler.";
+      return Response.json({ error: `bellows-Fehler: ${msg}` }, { status: 500 });
+    }
+  }
+
   const apiKey = providerKey(provider, body.apiKey);
   if (!apiKey) {
     const envName = provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";

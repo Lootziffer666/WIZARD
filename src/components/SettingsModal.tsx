@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export type AiProvider = "anthropic" | "openai";
+export type AiProvider = "anthropic" | "openai" | "bellows";
 
 export interface Settings {
   provider: AiProvider;
@@ -13,6 +13,9 @@ export interface Settings {
 const MODELS: Record<AiProvider, string[]> = {
   anthropic: ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"],
   openai: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini"],
+  // Bellows routet serverseitig - welches Modell erreichbar ist, hängt von der
+  // WIZARD_LLM_BASE_URL-Konfiguration ab. Leer = freies Textfeld statt Auswahl.
+  bellows: [],
 };
 
 const PROVIDERS: { id: AiProvider; label: string; env: string; placeholder: string }[] = [
@@ -27,6 +30,12 @@ const PROVIDERS: { id: AiProvider; label: string; env: string; placeholder: stri
     label: "OpenAI GPT",
     env: "OPENAI_API_KEY",
     placeholder: "sk-proj-…",
+  },
+  {
+    id: "bellows",
+    label: "Anvil-Bellows (Gateway)",
+    env: "WIZARD_LLM_API_KEY",
+    placeholder: "optional – Bearer-Token des Gateways",
   },
 ];
 
@@ -85,22 +94,43 @@ export default function SettingsModal({
         />
 
         <label className="mb-1 block text-xs text-neutral-400">Modell</label>
-        <select
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          className="mb-4 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-        >
-          {providerModels.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+        {providerModels.length > 0 ? (
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            className="mb-4 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+          >
+            {providerModels.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="leer lassen = Server-Default (WIZARD_LLM_MODEL)"
+            className="mb-4 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-emerald-500"
+          />
+        )}
 
         <p className="mb-4 text-xs text-neutral-500">
-          Der Key wird nur an den gewählten Anbieter gesendet und nur lokal im
-          Browser gespeichert. Für Docker/Server kannst du alternativ{" "}
-          <code>{activeProvider.env}</code> setzen.
+          {provider === "bellows" ? (
+            <>
+              Leitet über den gemeinsamen Anvil-Bellows-Gateway (OpenAI-kompatibel,
+              serverseitig konfigurierte Provider-Keys). Server braucht{" "}
+              <code>WIZARD_LLM_BASE_URL</code>; Key/Modell hier sind optional und
+              überschreiben nur <code>WIZARD_LLM_API_KEY</code>/<code>WIZARD_LLM_MODEL</code>.
+            </>
+          ) : (
+            <>
+              Der Key wird nur an den gewählten Anbieter gesendet und nur lokal im
+              Browser gespeichert. Für Docker/Server kannst du alternativ{" "}
+              <code>{activeProvider.env}</code> setzen.
+            </>
+          )}
         </p>
 
         <div className="flex justify-end gap-2">
