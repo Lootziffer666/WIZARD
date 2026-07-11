@@ -38,11 +38,11 @@ function summarize(a: LibraryAsset): BriefAsset {
   };
 }
 
-export function buildProductionBrief(
+export async function buildProductionBrief(
   brief: string,
   maxPerRole = 4
-): BriefResult {
-  const broad = searchLibrary({ query: brief, limit: 12 }).map(summarize);
+): Promise<BriefResult> {
+  const broad = (await searchLibrary({ query: brief, limit: 12 })).map(summarize);
 
   const starterKit: Record<string, BriefAsset[]> = {};
   const missingAssets: string[] = [];
@@ -50,7 +50,7 @@ export function buildProductionBrief(
   for (const r of ROLES) {
     let hits: LibraryAsset[] = [];
     for (const c of r.cats) {
-      const res = searchLibrary({ query: brief, category: c, limit: maxPerRole });
+      const res = await searchLibrary({ query: brief, category: c, limit: maxPerRole });
       hits = hits.concat(res);
       if (hits.length >= maxPerRole) break;
     }

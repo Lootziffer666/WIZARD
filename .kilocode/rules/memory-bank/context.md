@@ -2,14 +2,18 @@
 
 ## Current State
 
-**Status**: ✅ AssetPilot MVP gebaut (KI-gestützte Asset-Suche + lokale Previews)
+**Status**: ✅ WIZARD MVP geschärft (Vater-Sohn-Spielideen → Asset-Starter-Kits + lokale Previews)
 
-Nächste Evolutionsstufe: **agentisches Kreativstudio** (siehe `assetpilot.md`
+Aktueller Fokus: **WIZARD als nützliche Seite für Vater & Sohn**. Nächste Evolutionsstufe bleibt das **agentische Kreativstudio** (siehe `assetpilot.md`
 im Repo-Root – die neue Leitvision). Asset Pilot wird vom Asset-Browser zum
 *Produktionsleiter*, der aus einer Spielidee Starter Kits + Missing-Asset-Listen
 erzeugt und Assets nach Stil/Genre/Atmosphäre (visuelle Grammatik) castet.
 
 ## Recently Completed
+
+- [x] WIZARD-Landingpage stärker auf Vater-Sohn-Spielideen ausgerichtet: Hero-Bereich, Beispielideen, WIZARD-Chat-Texte und kindgerechter System-Prompt; Asset-Bilder bleiben sichtbar und werden im Hero als Live-Fundus gezeigt.
+- [x] Docker-Deployment vorbereitet (`Dockerfile`, `docker-compose.yml`, `.env.example`) und Runner kopiert Datenbank + Asset-Bilder nach `/app/data`, damit Previews im Container sichtbar bleiben.
+- [x] KI-Anbieter-Auswahl ergänzt: Anthropic oder OpenAI per UI-Key oder Server-Env (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`).
 
 - [x] AssetPilot GUI: Galerie (Suche/Filter) + Claude-Chat-Panel
 - [x] `search_assets` Tool (serverseitig) via Anthropic SDK

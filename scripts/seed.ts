@@ -1,19 +1,25 @@
 import { getDb } from "../src/lib/db";
 
-const db = getDb();
-const count = (db.prepare("SELECT COUNT(*) AS c FROM assets").get() as {
-  c: number;
-}).c;
-const facets = (() => {
-  const platforms = db
-    .prepare("SELECT DISTINCT platform FROM assets ORDER BY platform")
-    .all() as { platform: string }[];
-  const categories = db
-    .prepare("SELECT DISTINCT category FROM assets ORDER BY category")
-    .all() as { category: string }[];
-  return { platforms, categories: categories.length };
-})();
+async function main() {
+  const db = getDb();
+  const countResult = await db.execute("SELECT COUNT(*) AS c FROM assets");
+  const count = Number(countResult.rows[0]?.c ?? 0);
 
-console.log(`Database ready: ${count} assets`);
-console.log(`Platforms: ${facets.platforms.map((p) => p.platform).join(", ")}`);
-console.log(`Distinct categories: ${facets.categories}`);
+  const platformsResult = await db.execute(
+    "SELECT DISTINCT platform FROM assets ORDER BY platform"
+  );
+  const categoriesResult = await db.execute(
+    "SELECT DISTINCT category FROM assets ORDER BY category"
+  );
+
+  const platforms = platformsResult.rows as unknown as { platform: string }[];
+
+  console.log(`Database ready: ${count} assets`);
+  console.log(`Platforms: ${platforms.map((p) => p.platform).join(", ")}`);
+  console.log(`Distinct categories: ${categoriesResult.rows.length}`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

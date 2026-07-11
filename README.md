@@ -108,7 +108,26 @@ When first started, the database is automatically created from `src/data/assets.
 
 ### Adding API Key
 
-Click the ⚙️ icon in the top right → click on API Key → enter your Anthropic API key. The key is stored in localStorage and never transmitted to third parties.
+Click the ⚙️ icon in the top right → choose Anthropic or OpenAI → enter the matching API key. The key is stored in localStorage and sent only to the selected provider. For deployments you can also set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` on the server.
+
+
+### Docker Deployment
+
+```bash
+cp .env.example .env
+# Fill at least one provider key in .env: ANTHROPIC_API_KEY or OPENAI_API_KEY
+docker compose up --build -d
+```
+
+The container serves WIZARD at `http://localhost:3000`, keeps the committed
+asset database and image previews available under `/app/data`, and mounts a
+`wizard-data` volume so the database can persist across restarts. The UI can use
+either server-side environment keys or a browser-local key entered in Settings.
+
+Supported AI provider environment variables:
+
+- `ANTHROPIC_API_KEY` for Claude models
+- `OPENAI_API_KEY` for GPT models
 
 ---
 

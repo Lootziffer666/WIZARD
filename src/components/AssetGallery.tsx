@@ -44,7 +44,7 @@ export default function AssetGallery({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Assets durchsuchen…"
+          placeholder="Fundus durchsuchen…"
           className="min-w-[160px] flex-1 rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-emerald-500"
         />
         <select
@@ -54,7 +54,7 @@ export default function AssetGallery({
         >
           {TYPES.map((t) => (
             <option key={t} value={t}>
-              {t === "" ? "Alle Typen" : t}
+              {t === "" ? "Alle Bausteine" : t}
             </option>
           ))}
         </select>
@@ -64,7 +64,7 @@ export default function AssetGallery({
             checked={onlyAi}
             onChange={(e) => setOnlyAi(e.target.checked)}
           />
-          nur KI-Treffer
+          nur WIZARD-Treffer
         </label>
         <span className="text-xs text-neutral-500">
           {results.length} / {catalog.length}
@@ -82,7 +82,7 @@ export default function AssetGallery({
         ))}
         {results.length === 0 && (
           <p className="col-span-full py-10 text-center text-sm text-neutral-500">
-            Keine Assets gefunden.
+            Keine Bausteine gefunden.
           </p>
         )}
       </div>

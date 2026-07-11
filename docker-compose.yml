@@ -1,0 +1,19 @@
+services:
+  wizard:
+    build: .
+    image: wizard:local
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      DATABASE_PATH: /app/data/assets.db
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - wizard-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  wizard-data:
