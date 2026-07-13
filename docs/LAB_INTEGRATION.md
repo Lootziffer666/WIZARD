@@ -1,0 +1,12 @@
+# WIZARD ↔ LAB
+
+WIZARD receives semantic asset needs from TRIVIUM and resolves them against the existing catalog. It may also register extracted or SWIFT-generated artifacts as session assets.
+
+`src/lib/lab.ts` provides:
+
+- conversion from a LAB need to WIZARD search parameters;
+- conversion from generated artifacts to WIZARD's existing `Asset` shape;
+- a production-context string for the AI brief;
+- explicit binding states: existing, generated, or missing.
+
+WIZARD does not infer game rules from filenames. The need's role and acceptable realization come from TRIVIUM contracts; WIZARD answers which available asset can fulfil that role and what remains missing.
