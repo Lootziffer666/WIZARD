@@ -9,4 +9,10 @@ WIZARD receives semantic asset needs from TRIVIUM and resolves them against the 
 - a production-context string for the AI brief;
 - explicit binding states: existing, generated, or missing.
 
+## BELLOWS boundary
+
+Deterministic catalog filtering stays local. Any model-assisted semantic search, production brief, ranking, tagging or missing-asset explanation must use the LAB `aiGateway`, which points to BELLOWS. WIZARD must not hold provider-specific keys or call Claude, Gemini, OpenAI or another provider directly.
+
+The current LAB adapter creates context and bindings but does not perform a provider request itself. This keeps the boundary honest until WIZARD's server-side Bellows client is wired.
+
 WIZARD does not infer game rules from filenames. The need's role and acceptable realization come from TRIVIUM contracts; WIZARD answers which available asset can fulfil that role and what remains missing.
