@@ -80,6 +80,19 @@ Unreal in a Box. Diese sind Teil der Vision, aber eigene Baustellen.
 - 2026-07-07: `assetpilot.md` (Vision-Brainstorming) ins Repo gelegt → Scope
   erweitert sich zum agentischen Kreativstudio. Memory-Bank an Vision angepasst
   (brief/product/architecture/context).
+- 2026-07-14: Deployment-Fokus (Nutzer wollte WIZARD lauffähig deployt sehen).
+  Realer `SQLITE_BUSY`-Bug in `getDb()` gefunden + gefixt (WAL + busy_timeout;
+  reproduziert 20/30 Fehlschläge über 10 Läufe ohne Fix, 0/30 mit Fix, siehe
+  README-Abschnitt "Docker Deployment"). Dabei auch einen realen
+  Integrationsfehler auf ANVIL-Seite gefunden: `studio-run` postete die falsche
+  Form an `/api/production-assessment` (`{seedWords, note}` statt `{brief}`) —
+  fiel bei jedem Mock/Fixture nie auf, 400 gegen diesen echten Server. Beides
+  end-to-end gegen den echten Standalone-Build (`npm run build` + `server.js`,
+  exakt der Docker-Artefakt) verifiziert, inkl. 8 gleichzeitiger Requests und
+  eines echten `studio-run`-Laufs gegen diesen Server via `WIZARD_BASE_URL`.
+  Hinweis: `Wichtige Hinweise` oben nennt noch `better-sqlite3` — `package.json`
+  nutzt tatsächlich `@libsql/client`; nicht in dieser Runde korrigiert (nicht
+  Teil des Auftrags), aber hier vermerkt.
 
 ## Wichtige Hinweise
 

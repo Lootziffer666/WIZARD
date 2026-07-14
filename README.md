@@ -129,6 +129,24 @@ Supported AI provider environment variables:
 - `ANTHROPIC_API_KEY` for Claude models
 - `OPENAI_API_KEY` for GPT models
 
+**Bugfix (2026-07-14):** `getDb()` opened the local SQLite file without WAL
+journaling or a busy-timeout. Two processes touching `data/assets.db` at the
+same time (concurrent requests to any DB-backed route, concurrent test
+workers, ANVIL's `WizardHttpAdapter`/`studio-run` calling in while another
+request was in flight) could hit `SQLITE_BUSY: database is locked` and 500 —
+reproduced deterministically (20/30 failures across 10 trials of 3 concurrent
+processes racing a fresh DB file) and fixed by setting `PRAGMA journal_mode =
+WAL; PRAGMA busy_timeout = 5000;` right after the client is created (0/30
+failures under the same test after the fix). Also fixed a real integration
+bug on the caller side: ANVIL's `studio-run` was POSTing `{"seedWords": [...],
+"note": "..."}` to `/api/production-assessment` instead of the `{"brief":
+"<text>"}` this route's validator actually requires — passed against every
+mock/fixture, 400'd against this real, deployed server. Verified end-to-end
+against a real build (`npm run build` + the standalone `server.js`, the exact
+artifact the Docker image ships): `/api/health`, `/api/production-assessment`
+under 8 concurrent requests, and a real `studio-run --seed "..." ` run
+pointed at this server via `WIZARD_BASE_URL` all succeed.
+
 ---
 
 ## Database
