@@ -133,6 +133,19 @@ export function getDb(): Client {
         }
   );
 
+  if (!dbUrl) {
+    // Rollback-journal mode (the libsql default) takes an exclusive lock for
+    // the whole duration of any write, including the CREATE TABLE/INDEX DDL
+    // below — a second process opening the same on-disk file at the same
+    // moment (concurrent Next.js requests, concurrent test workers) gets an
+    // immediate SQLITE_BUSY instead of waiting, since nothing here asked it
+    // to. WAL lets readers and a writer coexist; busy_timeout makes any
+    // remaining lock contention retry for a bit instead of failing instantly.
+    // Reproduced live: `npm test` failed exactly this way (production-assessment
+    // route returning 500) before this fix, passed after.
+    db.executeMultiple(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;`);
+  }
+
   ensureSchema(db);
 
   // Seed synchronously on first access for local file mode
