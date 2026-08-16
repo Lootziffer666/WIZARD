@@ -107,9 +107,16 @@ export function getDb(): Client {
   }
 
   const runtimePath = localRuntimeDbPath();
-  g.__assetsDb = createClient({ url: `file:${runtimePath}` });
+  const db = createClient({ url: `file:${runtimePath}` });
+
+  // Keep the concurrency protection that WIZARD already relied on. This is
+  // especially important for parallel tests/local callers and is safe on
+  // Vercel because its copy lives in writable /tmp.
+  db.executeMultiple(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;`);
+
+  g.__assetsDb = db;
   g.__assetsDbPath = runtimePath;
-  return g.__assetsDb;
+  return db;
 }
 
 function buildMatch(query: string, mode: "and" | "or" = "and"): string {
