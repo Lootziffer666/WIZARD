@@ -20,6 +20,10 @@
 # production
 /build
 
+# generated WIZARD catalog (created by scripts/prepare-assets.mjs)
+/public/catalog.json
+/public/catalog-images/
+
 # misc
 .DS_Store
 *.pem
