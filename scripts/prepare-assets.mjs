@@ -146,6 +146,10 @@ for (let i = 0; i < statements.length; i += BATCH_SIZE) {
   await db.batch(statements.slice(i, i + BATCH_SIZE), "write");
 }
 
+// The deployed bundle contains assets.db, not transient WAL/SHM files. Force
+// all changes into the main DB before Next's output tracing snapshots it.
+await db.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+await db.execute("PRAGMA journal_mode = DELETE");
 db.close();
 
 let copiedImages = 0;
