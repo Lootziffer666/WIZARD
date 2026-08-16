@@ -1,0 +1,48 @@
+name: Vercel Ready
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-ready-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        # The repository's existing bun.lock currently drifts under the newest
+        # Bun resolver. Match Vercel's permissive install instead of failing
+        # before the actual app checks can run.
+        run: bun install
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Build exactly like Vercel
+        run: bun run build
+
+      - name: Verify generated deployment assets
+        shell: bash
+        run: |
+          test -s public/catalog.json
+          test -s data/assets.db
+          test -d public/catalog-images
+          node -e 'const fs=require("fs"); const c=JSON.parse(fs.readFileSync("public/catalog.json","utf8")); if (!Array.isArray(c) || c.length < 1) process.exit(1); console.log(`catalog: ${c.length} assets`)'

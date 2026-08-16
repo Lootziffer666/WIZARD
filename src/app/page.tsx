@@ -39,13 +39,20 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/assets?limit=3000")
-      .then((r) => r.json())
-      .then((data) => {
-        if (active) setCatalog(data.assets ?? []);
+    // The gallery catalog is generated during the build and served as a static
+    // Vercel/CDN asset. Loading/filtering the gallery no longer wakes a server
+    // function or opens SQLite.
+    fetch("/catalog.json", { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error(`catalog.json returned ${r.status}`);
+        return r.json();
+      })
+      .then((data: unknown) => {
+        if (!active) return;
+        setCatalog(Array.isArray(data) ? (data as Catalog) : []);
       })
       .catch((err) => {
-        console.error("[WIZARD] Failed to load catalog:", err);
+        console.error("[WIZARD] Failed to load static catalog:", err);
         setCatalog([]);
       })
       .finally(() => {
