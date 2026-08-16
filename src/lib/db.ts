@@ -1,5 +1,5 @@
 import { createClient, type Client } from "@libsql/client";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Asset, AssetType } from "./types";
 
@@ -32,15 +32,21 @@ export interface Facets {
   publishers: string[];
 }
 
-// Stable path: the Next.js process starts from the project root in local and deployed runs.
 function projectRoot(): string {
   return process.cwd();
 }
 
-const DB_PATH = process.env.DATABASE_PATH ?? join(projectRoot(), "data", "assets.db");
-const SEED_PATH = join(projectRoot(), "src", "data", "assets.json");
+// assets.json is the canonical source. `npm/bun run build` synchronizes this
+// database before Next.js is built, so production never needs to parse and seed
+// thousands of rows on a request.
+const SOURCE_DB_PATH =
+  process.env.DATABASE_PATH ?? join(projectRoot(), "data", "assets.db");
+const VERCEL_DB_PATH = "/tmp/wizard-assets.db";
 
-const g = globalThis as unknown as { __assetsDb?: Client; __dbReady?: boolean };
+const g = globalThis as unknown as {
+  __assetsDb?: Client;
+  __assetsDbPath?: string;
+};
 
 function deriveType(category: string): AssetType {
   const c = category.toLowerCase();
@@ -70,92 +76,40 @@ export function toAsset(row: LibraryAsset): Asset {
   };
 }
 
-function ensureSchema(db: Client) {
-  db.executeMultiple(`
-    CREATE TABLE IF NOT EXISTS assets (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      category TEXT NOT NULL,
-      publisher TEXT NOT NULL,
-      platform TEXT NOT NULL,
-      url TEXT NOT NULL,
-      image TEXT,
-      addedAt INTEGER,
-      analysis TEXT
+function localRuntimeDbPath(): string {
+  if (!existsSync(SOURCE_DB_PATH)) {
+    throw new Error(
+      `Prepared asset database not found at ${SOURCE_DB_PATH}. Run \"bun run prepare:assets\" (or npm run prepare:assets) before starting WIZARD.`
     );
-    CREATE INDEX IF NOT EXISTS idx_assets_category ON assets(category);
-    CREATE INDEX IF NOT EXISTS idx_assets_platform ON assets(platform);
-    CREATE INDEX IF NOT EXISTS idx_assets_publisher ON assets(publisher);
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS assets_fts USING fts5(
-      id UNINDEXED,
-      title,
-      category,
-      publisher,
-      analysis,
-      tokenize = 'unicode61'
-    );
-  `);
-}
-
-async function seedIfEmpty(db: Client) {
-  const result = await db.execute("SELECT COUNT(*) AS c FROM assets");
-  const count = Number(result.rows[0]?.c ?? 0);
-  if (count > 0) return;
-  if (!existsSync(SEED_PATH)) {
-    throw new Error(`Seed file not found: ${SEED_PATH}`);
   }
-  const assets = JSON.parse(readFileSync(SEED_PATH, "utf8")) as LibraryAsset[];
 
-  for (const a of assets) {
-    await db.execute({
-      sql: `INSERT OR REPLACE INTO assets (id, title, category, publisher, platform, url, image, addedAt, analysis)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [a.id, a.title, a.category, a.publisher, a.platform, a.url, a.image, a.addedAt, ""],
-    });
-    await db.execute({
-      sql: `INSERT INTO assets_fts (id, title, category, publisher, analysis) VALUES (?, ?, ?, ?, ?)`,
-      args: [a.id, a.title, a.category, a.publisher, ""],
-    });
+  // Vercel's deployed function bundle is read-only. Copy the already prepared
+  // 1-2 MB SQLite file once per cold instance to /tmp instead of creating the
+  // schema and issuing thousands of INSERTs at request time.
+  if (process.env.VERCEL === "1") {
+    if (!existsSync(VERCEL_DB_PATH)) {
+      copyFileSync(SOURCE_DB_PATH, VERCEL_DB_PATH);
+    }
+    return VERCEL_DB_PATH;
   }
+
+  return SOURCE_DB_PATH;
 }
 
 export function getDb(): Client {
   if (g.__assetsDb) return g.__assetsDb;
 
   const dbUrl = process.env.DATABASE_URL;
-  const db = createClient(
-    dbUrl
-      ? { url: dbUrl }
-      : {
-          // Local file-based SQLite (dev + some serverless deployments)
-          url: `file:${DB_PATH}`,
-        }
-  );
-
-  if (!dbUrl) {
-    // Rollback-journal mode (the libsql default) takes an exclusive lock for
-    // the whole duration of any write, including the CREATE TABLE/INDEX DDL
-    // below — a second process opening the same on-disk file at the same
-    // moment (concurrent Next.js requests, concurrent test workers) gets an
-    // immediate SQLITE_BUSY instead of waiting, since nothing here asked it
-    // to. WAL lets readers and a writer coexist; busy_timeout makes any
-    // remaining lock contention retry for a bit instead of failing instantly.
-    // Reproduced live: `npm test` failed exactly this way (production-assessment
-    // route returning 500) before this fix, passed after.
-    db.executeMultiple(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;`);
+  if (dbUrl) {
+    g.__assetsDb = createClient({ url: dbUrl });
+    g.__assetsDbPath = dbUrl;
+    return g.__assetsDb;
   }
 
-  ensureSchema(db);
-
-  // Seed synchronously on first access for local file mode
-  // (for remote turso urls the seed runs async in the background)
-  if (!dbUrl) {
-    seedIfEmpty(db).catch(console.error);
-  }
-
-  g.__assetsDb = db;
-  return db;
+  const runtimePath = localRuntimeDbPath();
+  g.__assetsDb = createClient({ url: `file:${runtimePath}` });
+  g.__assetsDbPath = runtimePath;
+  return g.__assetsDb;
 }
 
 function buildMatch(query: string, mode: "and" | "or" = "and"): string {
@@ -165,8 +119,7 @@ function buildMatch(query: string, mode: "and" | "or" = "and"): string {
     .map((t) => t.replace(/["*]/g, "").trim())
     .filter(Boolean);
   if (tokens.length === 0) return "";
-  const joined = tokens.map((t) => `"${t}"*`).join(mode === "or" ? " OR " : " ");
-  return joined;
+  return tokens.map((t) => `"${t}"*`).join(mode === "or" ? " OR " : " ");
 }
 
 export async function searchLibrary(params: SearchParams = {}): Promise<LibraryAsset[]> {
@@ -269,9 +222,14 @@ export async function getFacets(): Promise<Facets> {
 
 export async function getDbStats(): Promise<{ total: number; dbPath: string; mode: string }> {
   const total = await getDb().execute("SELECT COUNT(*) c FROM assets");
+  const remote = Boolean(process.env.DATABASE_URL);
   return {
     total: Number(total.rows[0]?.c ?? 0),
-    dbPath: DB_PATH,
-    mode: process.env.DATABASE_URL ? "remote (libsql/turso)" : "local (file)",
+    dbPath: g.__assetsDbPath ?? SOURCE_DB_PATH,
+    mode: remote
+      ? "remote (libsql/turso)"
+      : process.env.VERCEL === "1"
+        ? "bundled sqlite -> /tmp"
+        : "local (file)",
   };
 }
